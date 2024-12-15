@@ -17,6 +17,11 @@ sealed trait TechLevel {
     case TechUnlocked => "\u25AE" // unicode rectangle
     case TechAcquired => "\u25AE\u25AE"
   }
+  def toInt() : Int = this match {
+    case TechLocked => 0
+    case TechUnlocked => 1
+    case TechAcquired => 2
+  }
 }
 object TechLevel {
   def ofString(s:String): TechLevel = {

@@ -274,6 +274,33 @@ object ServerMain extends App {
     source.map { query => TextMessage(Json.stringify(Json.toJson(query))) }.via(flow).to(sink).run()
   }
 
+  def addSpookyAI(gameState: GameState, gameid: String, enginePath: String) = {
+    val (actorRef, pub) = Source.actorRef[Protocol.Query](128, OverflowStrategy.fail).toMat(Sink.asPublisher(false))(Keep.both).run()
+    val source = Source.fromPublisher(pub)
+    val ai = actorSystem.actorOf(SpookyAI.props(actorRef, gameState, enginePath))
+
+    val sink: Sink[Message,_] = {
+      Flow[Message].collect { message: Message =>
+        message match {
+          case TextMessage.Strict(text) =>
+            Future.successful(text)
+          case TextMessage.Streamed(textStream) =>
+            textStream.runFold("")(_ + _)
+        }
+      } .mapAsync(1)((str:Future[String]) => str)
+        .map { (str: String) =>
+          val json = Json.parse(str)
+          json.validate[Protocol.Response] match {
+            case (s: JsSuccess[Protocol.Response]) => s.get
+            case (e: JsError) => Protocol.QueryError("Could not parse as query: " + JsError.toJson(e).toString())
+          }
+        }
+          .to(Sink.actorRef[Protocol.Response](ai, onCompleteMessage = Protocol.UserLeft("spooky", Some(S1))))
+    }
+
+    val flow = websocketMessageFlow(gameid,"spooky",Some("1"))
+    source.map { query => TextMessage(Json.stringify(Json.toJson(query))) }.via(flow).to(sink).run()
+  }
 
   //----------------------------------------------------------------------------------
   //DEFINE WEB SERVER ROUTES
@@ -379,7 +406,7 @@ object ServerMain extends App {
 
   <div class="buttons">
     <a href="/newGame" class="button">New Game</a>
-    <a href="/ai?difficulty=10" class="button">Vs AI (1v1)</a>
+    <a href="/ai?difficulty=10&ai=spooky" class="button">Vs AI (1v1)</a>
     <a href="/ai?difficulty=0&tutorial=true" class="button">Tutorial</a>
   </div>
       """
@@ -482,23 +509,31 @@ if(!username || username.length == 0) {
   path("ai") {
     parameter("tutorial" ? false) { doTutorial =>
       parameter("difficulty" ? 10) { difficulty =>
-        val secondsPerTurn = SideArray.create(120.0)
-        val startingSouls = SideArray.createTwo(0, 6)
-        val extraSoulsPerTurn = SideArray.createTwo(0, difficulty)
-        val targetWins = 1
-        val techSouls = 4
-        val maps_opt = None
-        val seed_opt = None
+        parameter("ai" ? "igor") { aiType =>
+          val secondsPerTurn = SideArray.create(120.0)
+          val startingSouls = SideArray.createTwo(0, 6)
+          val extraSoulsPerTurn = SideArray.createTwo(0, difficulty)
+          val targetWins = 1
+          val techSouls = 4
+          val maps_opt = None
+          val seed_opt = None
 
-        val gameid = chooseGameName("ai")
-        val gameState = GameState.createNormal(secondsPerTurn, startingSouls, extraSoulsPerTurn, targetWins, techSouls, maps_opt, seed_opt, None, false)
-        val gameActor = actorSystem.actorOf(Props(classOf[GameActor], gameState, gameid))
-        games = games + (gameid -> ((gameActor, gameState)))
-        gameActor ! StartGame()
+          val gameid = chooseGameName("ai")
+          val gameState = GameState.createNormal(secondsPerTurn, startingSouls, extraSoulsPerTurn, targetWins, techSouls, maps_opt, seed_opt, None, false)
+          val gameActor = actorSystem.actorOf(Props(classOf[GameActor], gameState, gameid))
+          games = games + (gameid -> ((gameActor, gameState)))
+          gameActor ! StartGame()
 
-        addAI(gameState, gameid, doTutorial)
+          aiType match {
+            case "spooky" =>
+              val enginePath = config.getString("app.spookyEnginePath")
+              addSpookyAI(gameState, gameid, enginePath)
+            case _ =>
+              addAI(gameState, gameid, doTutorial)
+          }
 
-        redirect(s"/play?game=$gameid&side=0", StatusCodes.SeeOther)
+          redirect(s"/play?game=$gameid&side=0", StatusCodes.SeeOther)
+        }
       }
     }
   } ~
@@ -969,7 +1004,6 @@ if(!username || username.length == 0) {
       }
         .to(Sink.actorRef[Protocol.Response](ai, onCompleteMessage = Protocol.UserLeft("igor", Some(S1))))
   }
-
 
   val flow = websocketMessageFlow(gameid,"igor",Some("1"))
   source.map { query => TextMessage(Json.stringify(Json.toJson(query))) }.via(flow).to(sink).run()
