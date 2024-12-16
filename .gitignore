@@ -10,3 +10,4 @@ bin/
 .ensime_cache
 src/main/scala/*.class
 web/
+games/*
