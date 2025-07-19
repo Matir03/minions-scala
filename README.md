@@ -9,7 +9,7 @@
 4. Within sbt, run `buildEverything` to compile everything. This is equivalent to `compile` (build the server), `fastOptJS` (compile the client via ScalaJS to Javascript), and `copyStuffTask` (create a web/ folder and copy everything there, where the server expects it).
 5. Outside of sbt, edit application.conf to have whatever settings you like.
 6. Within sbt, you can now run `minionsJVM/run` to run the server.
-7. In a browser, browse to http://localhost:8080/?username=<YOUR USERNAME HERE>&side=<0 OR 1>.
+7. In a browser, browse to http://localhost:5037/?username=<YOUR USERNAME HERE>&side=<0 OR 1>.
 
 Run `package` if you would like to generate a standalone executable JAR file for the server.
 Run `fullOptJS` to build the production client. The only difference with fastOptJS is that it's slower to compile but optimizes more. Note that there is no equivalent of copyStuffTask defined yet for this mode, you have to do things manually.
@@ -58,7 +58,7 @@ http://stackoverflow.com/questions/28565837/filename-too-long-sbt
   * $ sbt
   * $ buildEverything (in sbt console)
   * $ minionsJVM/run
-4. Visit localhost:8080. Your local copy should be running there.
+4. Visit localhost:5037. Your local copy should be running there.
 
 ## AWS Setup
 1. Reserve a medium instance (in AWS console)

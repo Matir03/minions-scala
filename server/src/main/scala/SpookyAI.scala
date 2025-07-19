@@ -81,8 +81,8 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
       engineProcess = Some(pb.run(processIO))
 
       // Initialize UCI engine
-      sendToEngine("uci")
-      waitForResponse("uciok")
+      sendToEngine("umi")
+      waitForResponse("umiok")
       sendToEngine("isready")
       waitForResponse("readyok")
     } catch {
@@ -101,12 +101,20 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
   }
 
   def sendToEngine(command: String): Unit = {
+    Log.log(s"Sending to engine: $command")
     engineInputQueue.put(command)
+  }
+
+  def receiveLineFromEngine(): String = {
+    var line: String = ""
+    line = engineOutputQueue.take()
+    Log.log(s"Received from engine: $line")
+    line
   }
 
   def waitForResponse(expected: String): Unit = {
     var line: String = null
-    while ({ line = engineOutputQueue.take(); line != expected }) {
+    while ({ line = receiveLineFromEngine(); line != expected }) {
       // Keep reading until we get the expected response
     }
     if (line != expected) {
@@ -114,17 +122,21 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
     }
   }
 
-  def getBestMove(position: String): Option[String] = {
+  def getBestMove(position: String): Option[List[String]] = {
     sendToEngine(s"position $position")
-    sendToEngine("go movetime 1000") // Think for 1 second
+    sendToEngine("play movetime 1000") // Think for 1 second and get full turn
 
+    var actions = List[String]()
     var line: String = null
-    while ({ line = engineOutputQueue.take(); !line.startsWith("bestmove") }) {
-      // Keep reading until we get the bestmove response
+
+    while ({ line = receiveLineFromEngine(); line != "endturn" && line != null }) {
+      if (line.startsWith("action ")) {
+        actions = actions :+ line
+      }
     }
 
-    if (line.startsWith("bestmove")) {
-      Some(line.split(" ")(1))
+    if (actions.nonEmpty) {
+      Some(actions)
     } else None
   }
 
@@ -144,10 +156,12 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
       val position = convertGameStateToUCI(game)
 
       // Get best move from engine
-      getBestMove(position).foreach { move =>
-        // Convert UCI move to game action
-        convertUCIMoveToAction(move).foreach { action =>
-          out ! action
+      getBestMove(position).foreach { actions =>
+        // Convert each UCI action to game action and send them
+        actions.foreach { action =>
+          convertUCIMoveToAction(action).foreach { gameAction =>
+            out ! gameAction
+          }
         }
       }
 
@@ -211,16 +225,98 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
   }
 
   private def convertUCIMoveToAction(uciMove: String): Option[Protocol.Query] = {
-    // TODO: Implement conversion of UCI move to game action
-    // This will need to parse the UCI move and convert it to appropriate
-    // Protocol.DoBoardAction or Protocol.DoGameAction
-    if (uciMove.startsWith("move")) {
-      val boardIdx = uciMove.split(" ")(1).toInt
-      // val action = uciMove.split(" ")(2)
-      val actionId = makeActionId()
-      Some(Protocol.DoBoardAction(boardIdx, PlayerActions(Nil, actionId)))
+    // UMI move format: "action <actiontype> [actionparams...]"
+    // Examples:
+    // "action boardaction 0 move 1,2 3,4" - move piece from (1,2) to (3,4) on board 0
+    // "action boardaction 0 attack 1,2 3,4" - attack from (1,2) to (3,4) on board 0
+    // "action boardaction 0 spawn 3,4 Necromancer" - spawn Necromancer at (3,4) on board 0
+    // "action buyspell Fireball" - buy spell
+    // "action advancetech 2" - advance tech by 2
+    // "action acquiretech 5" - acquire tech at index 5
+
+    val parts = uciMove.split(" ")
+    if (parts.length < 2 || parts(0) != "action") {
+      return None
+    }
+
+    val actionType = parts(1)
+    val actionId = makeActionId()
+
+    actionType match {
+      case "boardaction" if parts.length >= 4 =>
+        val boardIdx = parts(2).toInt
+        val boardActionType = parts(3)
+
+        boardActionType match {
+          case "move" if parts.length >= 6 =>
+            val toLoc = parseLocation(parts(5))
+            val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val movement = Movement(pieceSpec, Vector(toLoc))
+            val playerActions = PlayerActions(List(Movements(List(movement))), actionId)
+            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "attack" if parts.length >= 6 =>
+            val attackerSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val targetSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val playerActions = PlayerActions(List(Attack(attackerSpec, targetSpec)), actionId)
+            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "spawn" if parts.length >= 6 =>
+            val spawnLoc = parseLocation(parts(4))
+            val unitName = parts(5)
+            val pieceName: PieceName = unitName // PieceName is just a String type alias
+            val playerActions = PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
+            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "blink" if parts.length >= 5 =>
+            val blinkLoc = parseLocation(parts(4))
+            val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val playerActions = PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
+            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "cast" if parts.length >= 6 =>
+            val targetLoc = parseLocation(parts(5))
+            val spellId = 0 // TODO: Find actual spell ID
+            val targets = SpellOrAbilityTargets.singleLoc(targetLoc) // Use the correct type and factory method
+            val playerActions = PlayerActions(List(PlaySpell(spellId, targets)), actionId)
+            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "endphase" =>
+            // End the current phase - this might be handled differently
+            None
+
+          case _ =>
+            None
+        }
+
+      case "buyspell" if parts.length >= 3 =>
+        // This would be a game action, but the current structure doesn't support it directly
+        // For now, return None - this needs to be handled at a higher level
+        None
+
+      case "advancetech" if parts.length >= 3 =>
+        // This would be a game action
+        None
+
+      case "acquiretech" if parts.length >= 3 =>
+        // This would be a game action
+        None
+
+      case "givespell" if parts.length >= 4 =>
+        // This would be a game action
+        None
+
+      case _ =>
+        None
+    }
+  }
+
+  private def parseLocation(locStr: String): Loc = {
+    val coords = locStr.split(",")
+    if (coords.length == 2) {
+      Loc(coords(0).toInt, coords(1).toInt)
     } else {
-      None
+      Loc(0, 0) // Default fallback
     }
   }
 }
