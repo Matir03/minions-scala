@@ -1,9 +1,14 @@
 package minionsgame.server
 
-import scala.util.{Try,Success,Failure}
+import scala.util.{Success, Failure}
 import scala.concurrent.Future
 import java.util.concurrent.atomic.AtomicInteger
-import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter}
+import java.io.{
+  BufferedReader,
+  BufferedWriter,
+  InputStreamReader,
+  OutputStreamWriter
+}
 import scala.sys.process._
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
@@ -13,7 +18,8 @@ import play.api.libs.json._
 import minionsgame.core._
 import RichImplicits._
 
-private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) extends Actor {
+private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
+    extends Actor {
   var name = "Spooky"
   var side = Some(S1)
   val aiRand = Rand(RandUtils.sha256Long(game.randSeed + "#spooky"))
@@ -21,8 +27,10 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
 
   // UCI engine process
   private var engineProcess: Option[Process] = None
-  private val engineInputQueue: BlockingQueue[String] = new LinkedBlockingQueue[String]()
-  private val engineOutputQueue: BlockingQueue[String] = new LinkedBlockingQueue[String]()
+  private val engineInputQueue: BlockingQueue[String] =
+    new LinkedBlockingQueue[String]()
+  private val engineOutputQueue: BlockingQueue[String] =
+    new LinkedBlockingQueue[String]()
 
   def makeActionId(): String = {
     nextActionIdSuffix = nextActionIdSuffix + 1
@@ -85,6 +93,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
       waitForResponse("umiok")
       sendToEngine("isready")
       waitForResponse("readyok")
+      sendToEngine("position config " + getConfig(gameState))
     } catch {
       case e: Exception =>
         chat(s"Failed to start engine: ${e.getMessage}")
@@ -101,43 +110,39 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
   }
 
   def sendToEngine(command: String): Unit = {
-    Log.log(s"Sending to engine: $command")
+    Log.log(s"spooky < $command")
+    chat(s"spooky < $command")
     engineInputQueue.put(command)
   }
 
   def receiveLineFromEngine(): String = {
     var line: String = ""
     line = engineOutputQueue.take()
-    Log.log(s"Received from engine: $line")
+    Log.log(s"spooky > $line")
+    chat(s"spooky > $line")
     line
   }
 
-  def waitForResponse(expected: String): Unit = {
-    var line: String = null
-    while ({ line = receiveLineFromEngine(); line != expected }) {
-      // Keep reading until we get the expected response
-    }
-    if (line != expected) {
-      throw new Exception(s"Expected $expected but got $line")
-    }
-  }
-
-  def getBestMove(position: String): Option[List[String]] = {
-    sendToEngine(s"position $position")
-    sendToEngine("play movetime 1000") // Think for 1 second and get full turn
-
-    var actions = List[String]()
-    var line: String = null
-
-    while ({ line = receiveLineFromEngine(); line != "endturn" && line != null }) {
-      if (line.startsWith("action ")) {
-        actions = actions :+ line
+  def waitForResponse(expected: String): List[String] = {
+    var lines: List[String] = List()
+    while (true) {
+      val line = receiveLineFromEngine()
+      lines = lines :+ line
+      if (line.startsWith(expected)) {
+        return lines
       }
     }
+    lines
+  }
 
-    if (actions.nonEmpty) {
-      Some(actions)
-    } else None
+  def getBestMove(gameState: GameState): List[String] = {
+    sendToEngine("position fen " + convertGameStateToFEN(gameState))
+
+    sendToEngine("play nodes 1")
+
+    val _ = waitForResponse("turn")
+
+    waitForResponse("endturn")
   }
 
   override def preStart(): Unit = {
@@ -152,79 +157,115 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
     case Protocol.ReportTimeLeft(_) => ()
 
     case Protocol.ReportNewTurn(S1) if game.game.winner.isEmpty =>
-      // Convert current game state to UCI format
-      val position = convertGameStateToUCI(game)
-
       // Get best move from engine
-      getBestMove(position).foreach { actions =>
+      getBestMove(game).foreach { line =>
         // Convert each UCI action to game action and send them
-        actions.foreach { action =>
-          convertUCIMoveToAction(action).foreach { gameAction =>
-            out ! gameAction
-          }
-        }
+        val gameAction = convertUCIMoveToAction(line)
+        out ! gameAction
       }
 
     case _ => ()
   }
 
-  private def convertGameStateToUCI(gameState: GameState): String = {
-    // Format: fen [side] [num_boards] [board1_pos] [board1_spells] [board2_pos] [board2_spells] ... [boardn_pos] [techline_spells] [team0_money] [team1_money]
+  private def convertGameStateToFEN(gameState: GameState): String = {
+    /// fen <money> <board_points> <tech_state> <board_fen> ... <board_fen> <side_to_move> <turn_num>
+
+    def encodeTechState(techStates: Array[TechState]): String = {
+      // For each tech, compute state
+      val team0Spells = techStates
+        .map { techState =>
+          techState.level.apply(S0).toString.charAt(0)
+        }
+        .mkString("")
+      val team1Spells = techStates
+        .map { techState =>
+          techState.level.apply(S1).toString.charAt(0)
+        }
+        .mkString("")
+      s"$team0Spells|$team1Spells"
+    }
 
     def encodeBoardPosition(board: Board): String = {
-      // Encode each rank from 9 to 0
-      val ranks = (9 to 0 by -1).map { y =>
-        // For each rank, encode pieces from 0 to 9
-        val row = (0 to 9).map { x =>
-          val loc = Loc(x, y)
-          board.curState().pieces.apply(loc) match {
-            case Nil => "."  // Empty square
-            case (piece :: Nil) => piece.baseStats.shortDisplayName // Use piece ID as representation
-            case _ => throw new Exception("Unexpected multiple pieces at location")
+      val boardState = board.curState()
+      (9 to 0 by -1)
+        .map { y =>
+          var emptyCount = 0
+          val rowStr = new StringBuilder()
+          (0 to 9).foreach { x =>
+            boardState.pieces(Loc(x, y)) match {
+              case Nil => emptyCount += 1
+              case piece :: Nil =>
+                if (emptyCount > 0) {
+                  rowStr.append(emptyCount.toString)
+                  emptyCount = 0
+                }
+                rowStr.append(fenChar(piece.baseStats))
+              case _ =>
+                throw new Exception("Unexpected multiple pieces at location")
+            }
           }
-        }.mkString
-        row
-      }.mkString("/")
-      ranks
+          if (emptyCount > 0) {
+            rowStr.append(emptyCount.toString)
+          }
+          rowStr.toString()
+        }
+        .mkString("/")
     }
 
-    def encodeBoardSpells(board: Board, side: Side): String = {
-      val state = board.curState()
-      val sideSpells = state.spellsInHand.apply(side)
-      val oppSpells = state.spellsInHand.apply(side.opp)
-
-      s"${sideSpells.size} ${oppSpells.size} ${sideSpells.map(id => gameState.spellMap(id)).mkString(" ")}"
-    }
-
-    def encodeTechlineSpells(): String = {
-      // For each tech (1-24), count spells for each team
-      val game = gameState.game
-      val techLine = game.techLine;
-      val team0Spells = techLine.map { techState =>
-        techState.level.apply(S0).toInt.toString
-      }.mkString(" ")
-      val team1Spells = techLine.map { techState =>
-        techState.level.apply(S1).toInt.toString
-      }.mkString(" ")
-      s"$team0Spells $team1Spells"
-    }
-
-    val side = gameState.game.curSide.int
-    val numBoards = gameState.numBoards
-
+    val money = s"${gameState.game.souls(S0)}|${gameState.game.souls(S1)}"
+    val boardPoints = s"${gameState.game.wins(S0)}|${gameState.game.wins(S1)}"
+    val techState = encodeTechState(gameState.game.techLine)
     // Encode each board's position and spells
-    val boardsEncoding = gameState.boards.map { board =>
-      s"${encodeBoardPosition(board)} ${encodeBoardSpells(board, gameState.game.curSide)}"
-    }.mkString(" ")
+    val boards = gameState.boards
+      .map { board => encodeBoardPosition(board) }
+      .mkString(" ")
+    val side = gameState.game.curSide.int
+    val turnNum = gameState.game.turnNumber
 
-    val techlineSpells = encodeTechlineSpells()
-    val team0Money = gameState.game.souls(S0)
-    val team1Money = gameState.game.souls(S1)
-
-    s"fen $side $numBoards $boardsEncoding $techlineSpells $team0Money $team1Money"
+    s"$money $boardPoints $techState $boards $side $turnNum"
   }
 
-  private def convertUCIMoveToAction(uciMove: String): Option[Protocol.Query] = {
+  private def fenChar(piece: PieceStats): Char = {
+    piece.name match {
+      case "zombie"              => 'Z'
+      case "initiate"            => 'I'
+      case "skeleton"            => 'S'
+      case "serpent"             => 'P'
+      case "warg"                => 'W'
+      case "ghost"               => 'G'
+      case "wight"               => 'T'
+      case "haunt"               => 'H'
+      case "shrieker"            => 'K'
+      case "spectre"             => 'X'
+      case "rat"                 => 'A'
+      case "sorcerer"            => 'U'
+      case "witch"               => 'J'
+      case "vampire"             => 'V'
+      case "mummy"               => 'M'
+      case "lich"                => 'L'
+      case "void"                => 'O'
+      case "cerberus"            => 'C'
+      case "wraith"              => 'R'
+      case "horror"              => 'Q'
+      case "banshee"             => 'B'
+      case "elemental"           => 'E'
+      case "harpy"               => 'Y'
+      case "shadowlord"          => 'D'
+      case "necromancer"         => 'N'
+      case "arcane_necromancer"  => 'N'
+      case "ranged_necromancer"  => 'N'
+      case "mounted_necromancer" => 'N'
+      case "deadly_necromancer"  => 'N'
+      case "battle_necromancer"  => 'N'
+      case "zombie_necromancer"  => 'N'
+      case "mana_necromancer"    => 'N'
+      case "terrain_necromancer" => 'N'
+    }
+  }
+
+  private def convertUCIMoveToAction(
+      uciMove: String
+  ): Option[Protocol.Query] = {
     // UMI move format: "action <actiontype> [actionparams...]"
     // Examples:
     // "action boardaction 0 move 1,2 3,4" - move piece from (1,2) to (3,4) on board 0
@@ -252,33 +293,43 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String) exten
             val toLoc = parseLocation(parts(5))
             val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
             val movement = Movement(pieceSpec, Vector(toLoc))
-            val playerActions = PlayerActions(List(Movements(List(movement))), actionId)
+            val playerActions =
+              PlayerActions(List(Movements(List(movement))), actionId)
             Some(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "attack" if parts.length >= 6 =>
-            val attackerSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val attackerSpec = StartedTurnWithID(
+              -1
+            ) // TODO: Find actual piece ID
             val targetSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
-            val playerActions = PlayerActions(List(Attack(attackerSpec, targetSpec)), actionId)
+            val playerActions =
+              PlayerActions(List(Attack(attackerSpec, targetSpec)), actionId)
             Some(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "spawn" if parts.length >= 6 =>
             val spawnLoc = parseLocation(parts(4))
             val unitName = parts(5)
-            val pieceName: PieceName = unitName // PieceName is just a String type alias
-            val playerActions = PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
+            val pieceName: PieceName =
+              unitName // PieceName is just a String type alias
+            val playerActions =
+              PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
             Some(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "blink" if parts.length >= 5 =>
             val blinkLoc = parseLocation(parts(4))
             val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
-            val playerActions = PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
+            val playerActions =
+              PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
             Some(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "cast" if parts.length >= 6 =>
             val targetLoc = parseLocation(parts(5))
             val spellId = 0 // TODO: Find actual spell ID
-            val targets = SpellOrAbilityTargets.singleLoc(targetLoc) // Use the correct type and factory method
-            val playerActions = PlayerActions(List(PlaySpell(spellId, targets)), actionId)
+            val targets = SpellOrAbilityTargets.singleLoc(
+              targetLoc
+            ) // Use the correct type and factory method
+            val playerActions =
+              PlayerActions(List(PlaySpell(spellId, targets)), actionId)
             Some(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "endphase" =>

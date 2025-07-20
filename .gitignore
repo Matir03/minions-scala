@@ -11,3 +11,4 @@ bin/
 src/main/scala/*.class
 web/
 games/*
+*.metals
