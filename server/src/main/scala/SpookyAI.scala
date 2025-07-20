@@ -92,8 +92,8 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       sendToEngine("umi")
       waitForResponse("umiok")
       sendToEngine("isready")
-      waitForResponse("readyok")
-      sendToEngine("position config " + getConfig(gameState))
+      val _ = waitForResponse("readyok")
+      // sendToEngine("position config " + getConfig(gameState))
     } catch {
       case e: Exception =>
         chat(s"Failed to start engine: ${e.getMessage}")
@@ -173,11 +173,13 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     def encodeTechState(techStates: Array[TechState]): String = {
       // For each tech, compute state
       val team0Spells = techStates
+        .slice(2, techStates.length)
         .map { techState =>
           techState.level.apply(S0).toString.charAt(0)
         }
         .mkString("")
       val team1Spells = techStates
+        .slice(2, techStates.length)
         .map { techState =>
           techState.level.apply(S1).toString.charAt(0)
         }
@@ -187,7 +189,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 
     def encodeBoardPosition(board: Board): String = {
       val boardState = board.curState()
-      (9 to 0 by -1)
+      val position = (0 to 9)
         .map { y =>
           var emptyCount = 0
           val rowStr = new StringBuilder()
@@ -199,17 +201,37 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
                   rowStr.append(emptyCount.toString)
                   emptyCount = 0
                 }
-                rowStr.append(fenChar(piece.baseStats))
+                rowStr.append(fenChar(piece.baseStats.name, piece.side))
               case _ =>
                 throw new Exception("Unexpected multiple pieces at location")
             }
           }
           if (emptyCount > 0) {
-            rowStr.append(emptyCount.toString)
+            if (emptyCount == 10) {
+              rowStr.append("0")
+            } else {
+              rowStr.append(emptyCount.toString)
+            }
           }
           rowStr.toString()
         }
         .mkString("/")
+
+      val r0 = boardState
+        .reinforcements(S0)
+        .map { case (p, n) =>
+          (0 until n).map(_ => fenChar(p, S0)).mkString("")
+        }
+        .mkString("")
+
+      val r1 = boardState
+        .reinforcements(S1)
+        .map { case (p, n) =>
+          (0 until n).map(_ => fenChar(p, S1)).mkString("")
+        }
+        .mkString("")
+
+      s"n|$r0|$r1|||$position"
     }
 
     val money = s"${gameState.game.souls(S0)}|${gameState.game.souls(S1)}"
@@ -225,8 +247,8 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     s"$money $boardPoints $techState $boards $side $turnNum"
   }
 
-  private def fenChar(piece: PieceStats): Char = {
-    piece.name match {
+  private def fenChar(pieceName: PieceName, side: Side): Char = {
+    val char = pieceName match {
       case "zombie"              => 'Z'
       case "initiate"            => 'I'
       case "skeleton"            => 'S'
@@ -261,7 +283,18 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       case "mana_necromancer"    => 'N'
       case "terrain_necromancer" => 'N'
     }
+
+    if (side == S1) {
+      char.toLower
+    } else {
+      char
+    }
   }
+
+  // private def getConfig(gameState: GameState): String = {
+  //   val config = gameState.game.config
+  //   s"${config.numBoards}"
+  // }
 
   private def convertUCIMoveToAction(
       uciMove: String
