@@ -160,8 +160,10 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       // Get best move from engine
       getBestMove(game).foreach { line =>
         // Convert each UCI action to game action and send them
-        val gameAction = convertUCIMoveToAction(line)
-        out ! gameAction
+        val gameActions = convertUCIMoveToActions(line)
+        gameActions.foreach { action =>
+          out ! action
+        }
       }
 
     case _ => ()
@@ -291,121 +293,148 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     }
   }
 
-  // private def getConfig(gameState: GameState): String = {
-  //   val config = gameState.game.config
-  //   s"${config.numBoards}"
-  // }
-
-  private def convertUCIMoveToAction(
+  private def convertUCIMoveToActions(
       uciMove: String
-  ): Option[Protocol.Query] = {
-    // UMI move format: "action <actiontype> [actionparams...]"
-    // Examples:
-    // "action boardaction 0 move 1,2 3,4" - move piece from (1,2) to (3,4) on board 0
-    // "action boardaction 0 attack 1,2 3,4" - attack from (1,2) to (3,4) on board 0
-    // "action boardaction 0 spawn 3,4 Necromancer" - spawn Necromancer at (3,4) on board 0
-    // "action buyspell Fireball" - buy spell
-    // "action advancetech 2" - advance tech by 2
-    // "action acquiretech 5" - acquire tech at index 5
-
+  ): List[Protocol.Query] = {
     val parts = uciMove.split(" ")
-    if (parts.length < 2 || parts(0) != "action") {
-      return None
+
+    if (parts(0) == "endturn") {
+      return List(
+        Protocol.DoGameAction(SetBoardDone(0, true)),
+        Protocol.DoGameAction(SetBoardDone(1, true))
+      )
     }
 
     val actionType = parts(1)
     val actionId = makeActionId()
 
     actionType match {
-      case "boardaction" if parts.length >= 4 =>
+      case "b_attack" =>
         val boardIdx = parts(2).toInt
         val boardActionType = parts(3)
 
         boardActionType match {
-          case "move" if parts.length >= 6 =>
-            val toLoc = parseLocation(parts(5))
-            val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
-            val movement = Movement(pieceSpec, Vector(toLoc))
+          case "move" =>
+            val (fromLoc, toLoc) = parseLocPair(parts(4))
+            val pieceSpec =
+              game.boards(boardIdx).curState.pieces(fromLoc).head.spec
+            val movement = Movement(pieceSpec, Vector(fromLoc, toLoc))
             val playerActions =
               PlayerActions(List(Movements(List(movement))), actionId)
-            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+            List(Protocol.DoBoardAction(boardIdx, playerActions))
 
-          case "attack" if parts.length >= 6 =>
-            val attackerSpec = StartedTurnWithID(
-              -1
-            ) // TODO: Find actual piece ID
-            val targetSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+          case "move_cyclic" =>
+            val args = parts.slice(5, parts.length)
+            val locs = args.map(parseLocation)
+            val movements = locs.map { loc =>
+              val pieceSpec =
+                game.boards(boardIdx).curState.pieces(loc).head.spec
+              Movement(pieceSpec, Vector(loc))
+            }.toList
+            val playerActions =
+              PlayerActions(List(Movements(movements)), actionId)
+            List(Protocol.DoBoardAction(boardIdx, playerActions))
+
+          case "attack" =>
+            val (fromLoc, toLoc) = parseLocPair(parts(4))
+            val attackerSpec =
+              game.boards(boardIdx).curState.pieces(fromLoc).head.spec
+            val targetSpec =
+              game.boards(boardIdx).curState.pieces(toLoc).head.spec
             val playerActions =
               PlayerActions(List(Attack(attackerSpec, targetSpec)), actionId)
-            Some(Protocol.DoBoardAction(boardIdx, playerActions))
+            List(Protocol.DoBoardAction(boardIdx, playerActions))
 
-          case "spawn" if parts.length >= 6 =>
-            val spawnLoc = parseLocation(parts(4))
-            val unitName = parts(5)
-            val pieceName: PieceName =
-              unitName // PieceName is just a String type alias
-            val playerActions =
-              PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
-            Some(Protocol.DoBoardAction(boardIdx, playerActions))
-
-          case "blink" if parts.length >= 5 =>
+          case "blink" =>
             val blinkLoc = parseLocation(parts(4))
-            val pieceSpec = StartedTurnWithID(-1) // TODO: Find actual piece ID
+            val pieceSpec =
+              game.boards(boardIdx).curState.pieces(blinkLoc).head.spec
             val playerActions =
               PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
-            Some(Protocol.DoBoardAction(boardIdx, playerActions))
-
-          case "cast" if parts.length >= 6 =>
-            val targetLoc = parseLocation(parts(5))
-            val spellId = 0 // TODO: Find actual spell ID
-            val targets = SpellOrAbilityTargets.singleLoc(
-              targetLoc
-            ) // Use the correct type and factory method
-            val playerActions =
-              PlayerActions(List(PlaySpell(spellId, targets)), actionId)
-            Some(Protocol.DoBoardAction(boardIdx, playerActions))
-
-          case "endphase" =>
-            // End the current phase - this might be handled differently
-            None
-
-          case _ =>
-            None
+            List(Protocol.DoBoardAction(boardIdx, playerActions))
         }
 
-      case "buyspell" if parts.length >= 3 =>
-        // This would be a game action, but the current structure doesn't support it directly
-        // For now, return None - this needs to be handled at a higher level
-        None
+      case "b_spawn" =>
+        val boardIdx = parts(2).toInt
+        val boardActionType = parts(3)
 
-      case "advancetech" if parts.length >= 3 =>
-        // This would be a game action
-        None
+        boardActionType match {
+          case "buy" =>
+            val unitChar = parts(4).charAt(0)
+            val pieceName = pieceNameFromFenChar(unitChar.toUpper)
+            val action =
+              DoGeneralBoardAction(BuyReinforcement(pieceName, false), actionId)
+            List(Protocol.DoBoardAction(boardIdx, action))
 
-      case "acquiretech" if parts.length >= 3 =>
-        // This would be a game action
-        None
+          case "spawn" =>
+            val unitChar = parts(4).charAt(0)
+            val spawnLoc = parseLocation(parts(5))
+            val pieceName = pieceNameFromFenChar(unitChar.toUpper)
+            val playerActions =
+              PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
+            List(Protocol.DoBoardAction(boardIdx, playerActions))
+        }
 
-      case "givespell" if parts.length >= 4 =>
-        // This would be a game action
-        None
+      case "adv_tech" if parts.length >= 3 =>
+        val numTechs = parts(2).toInt
+        (1 until numTechs)
+          .map(_ =>
+            Protocol.DoGameAction(BuyExtraTechAndSpell(game.game.curSide))
+          )
+          .toList
 
-      case _ =>
-        None
+      case "acq_tech" if parts.length >= 3 =>
+        val techIndex = parts(2).toInt
+        List(Protocol.DoGameAction(PerformTech(game.game.curSide, techIndex)))
     }
   }
 
+  private def parseLocPair(locPairStr: String): (Loc, Loc) = {
+    val coords1 = locPairStr.slice(0, 2)
+    val coords2 = locPairStr.slice(2, 4)
+    (parseLocation(coords1), parseLocation(coords2))
+  }
+
   private def parseLocation(locStr: String): Loc = {
-    val coords = locStr.split(",")
-    if (coords.length == 2) {
-      Loc(coords(0).toInt, coords(1).toInt)
-    } else {
-      Loc(0, 0) // Default fallback
+    // format: a0-j9
+    val x = locStr.charAt(0) - 'a'
+    val y = locStr.charAt(1) - '0'
+    Loc(x, y)
+  }
+  private def pieceNameFromFenChar(char: Char): PieceName = {
+    char match {
+      case 'Z' => "zombie"
+      case 'I' => "initiate"
+      case 'S' => "skeleton"
+      case 'P' => "serpent"
+      case 'W' => "warg"
+      case 'G' => "ghost"
+      case 'T' => "wight"
+      case 'H' => "haunt"
+      case 'K' => "shrieker"
+      case 'X' => "spectre"
+      case 'A' => "rat"
+      case 'U' => "sorcerer"
+      case 'J' => "witch"
+      case 'V' => "vampire"
+      case 'M' => "mummy"
+      case 'L' => "lich"
+      case 'O' => "void"
+      case 'C' => "cerberus"
+      case 'R' => "wraith"
+      case 'Q' => "horror"
+      case 'B' => "banshee"
+      case 'E' => "elemental"
+      case 'Y' => "harpy"
+      case 'D' => "shadowlord"
+      case 'N' => "necromancer"
+      case _   => throw new Exception(s"Invalid piece name: $char")
     }
   }
 }
 
 object SpookyAI {
+
   def props(out: ActorRef, game: GameState, enginePath: String): Props =
     Props(new SpookyAI(out, game, enginePath))
 }
