@@ -374,27 +374,24 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
         }
 
-      case "adv_tech" if parts.length >= 3 =>
-        val numTechs = parts(2).toInt
+      case "tech" =>
+        val advanceBy = parts(2).toInt
+        val acquire = parts.slice(3, parts.length).map(_.toInt)
         val side = game.game.curSide
-        val buySpells = (1 until numTechs)
+        val spellsToBuy = advanceBy + acquire.length - 1
+        val buySpells = (0 until spellsToBuy)
           .map(_ => Protocol.DoGameAction(BuyExtraTechAndSpell(side)))
           .toList
         val idx = game.game.techLine.indexWhere { techState =>
           techState.level(side) == TechLocked
         }
-        val doTech = (0 until numTechs)
+        val advanceTech = (0 until advanceBy)
           .map(i => Protocol.DoGameAction(PerformTech(side, idx + i)))
           .toList
-        buySpells ++ doTech
-
-      case "acq_tech" if parts.length >= 3 =>
-        val techIndex = parts(2).toInt
-        val side = game.game.curSide
-        List(
-          Protocol.DoGameAction(BuyExtraTechAndSpell(side)),
-          Protocol.DoGameAction(PerformTech(side, techIndex + 2))
-        )
+        val acquireTech = acquire
+          .map(i => Protocol.DoGameAction(PerformTech(side, i + 2)))
+          .toList
+        buySpells ++ advanceTech ++ acquireTech
     }
   }
 
