@@ -76,7 +76,9 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
           try {
             var line: String = null
             while ({ line = reader.readLine(); line != null }) {
-              Log.log(s"UCI engine error: $line")
+              val msg = s"spooky err> $line"
+              Log.log(msg)
+              chat(msg)
             }
           } finally {
             reader.close()
@@ -310,26 +312,27 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     actionType match {
       case "b_attack" =>
         val boardIdx = parts(2).toInt
+        val board = game.boards(boardIdx).curState
         val boardActionType = parts(3)
 
         boardActionType match {
           case "move" =>
             val (fromLoc, toLoc) = parseLocPair(parts(4))
-            val pieceSpec =
-              game.boards(boardIdx).curState.pieces(fromLoc).head.spec
-            val movement = Movement(pieceSpec, Vector(fromLoc, toLoc))
+            val movement = makeMovement(board, fromLoc, toLoc)
             val playerActions =
               PlayerActions(List(Movements(List(movement))), actionId)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
 
           case "move_cyclic" =>
             val args = parts.slice(5, parts.length)
-            val locs = args.map(parseLocation)
-            val movements = locs.map { loc =>
-              val pieceSpec =
-                game.boards(boardIdx).curState.pieces(loc).head.spec
-              Movement(pieceSpec, Vector(loc))
-            }.toList
+            val locs = args.map(parseLocation).toList
+
+            val loc_pairs =
+              locs.sliding(2).toList ++ List(List(locs.last, locs.head))
+
+            val movements = loc_pairs.map { case List(fromLoc, toLoc) =>
+              makeMovement(board, fromLoc, toLoc)
+            }
             val playerActions =
               PlayerActions(List(Movements(movements)), actionId)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
@@ -393,6 +396,23 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
           .toList
         buySpells ++ advanceTech ++ acquireTech
     }
+  }
+
+  private def makeMovement(
+      board: BoardState,
+      fromLoc: Loc,
+      toLoc: Loc
+  ): Movement = {
+    val piece = board.pieces(fromLoc).head
+    val path = board.findPathForUI(
+      piece,
+      pathBias = List(),
+      isRotationPath = false
+    ) { case (loc, _) => loc == toLoc } match {
+      case None => throw new Exception(s"Invalid move ${piece.loc} -> $toLoc")
+      case Some((path, _)) => path
+    }
+    Movement(piece.spec, path.toVector)
   }
 
   private def parseLocPair(locPairStr: String): (Loc, Loc) = {
