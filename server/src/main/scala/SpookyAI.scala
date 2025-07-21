@@ -299,10 +299,9 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val parts = uciMove.split(" ")
 
     if (parts(0) == "endturn") {
-      return List(
-        Protocol.DoGameAction(SetBoardDone(0, true)),
-        Protocol.DoGameAction(SetBoardDone(1, true))
-      )
+      return (0 until game.numBoards)
+        .map(i => Protocol.DoGameAction(SetBoardDone(i, true)))
+        .toList
     }
 
     val actionType = parts(1)
@@ -377,15 +376,25 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 
       case "adv_tech" if parts.length >= 3 =>
         val numTechs = parts(2).toInt
-        (1 until numTechs)
-          .map(_ =>
-            Protocol.DoGameAction(BuyExtraTechAndSpell(game.game.curSide))
-          )
+        val side = game.game.curSide
+        val buySpells = (1 until numTechs)
+          .map(_ => Protocol.DoGameAction(BuyExtraTechAndSpell(side)))
           .toList
+        val idx = game.game.techLine.indexWhere { techState =>
+          techState.level(side) == TechLocked
+        }
+        val doTech = (0 until numTechs)
+          .map(i => Protocol.DoGameAction(PerformTech(side, idx + i)))
+          .toList
+        buySpells ++ doTech
 
       case "acq_tech" if parts.length >= 3 =>
         val techIndex = parts(2).toInt
-        List(Protocol.DoGameAction(PerformTech(game.game.curSide, techIndex)))
+        val side = game.game.curSide
+        List(
+          Protocol.DoGameAction(BuyExtraTechAndSpell(side)),
+          Protocol.DoGameAction(PerformTech(side, techIndex + 2))
+        )
     }
   }
 

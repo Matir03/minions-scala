@@ -593,10 +593,10 @@ if(!username || username.length == 0) {
         parameter("difficulty" ? 10) { difficulty =>
           parameter("ai" ? "spooky") { aiType =>
             val secondsPerTurn = SideArray.create(120.0)
-            val startingSouls = SideArray.create(0)
+            val startingSouls = SideArray.createTwo(0, 6)
             val extraSoulsPerTurn = SideArray.create(0)
             val targetWins = 2
-            val techSouls = 8
+            val techSouls = 4
             val maps_opt = Some(List("Blackened Shores", "Midnight Lake"))
             val seed_opt = None
 
