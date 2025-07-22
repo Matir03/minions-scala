@@ -42,65 +42,59 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   }
 
   def startEngine(): Unit = {
-    try {
-      val processIO = new ProcessIO(
-        // Handle process input
-        in => {
-          val writer = new BufferedWriter(new OutputStreamWriter(in))
-          try {
-            while (true) {
-              val cmd = engineInputQueue.take()
-              writer.write(cmd + "\n")
-              writer.flush()
-            }
-          } catch {
-            case _: InterruptedException =>
-              writer.close()
+    val processIO = new ProcessIO(
+      // Handle process input
+      in => {
+        val writer = new BufferedWriter(new OutputStreamWriter(in))
+        try {
+          while (true) {
+            val cmd = engineInputQueue.take()
+            writer.write(cmd + "\n")
+            writer.flush()
           }
-        },
-        // Handle process output
-        out => {
-          val reader = new BufferedReader(new InputStreamReader(out))
-          try {
-            var line: String = null
-            while ({ line = reader.readLine(); line != null }) {
-              engineOutputQueue.put(line)
-            }
-          } finally {
-            reader.close()
+        } catch {
+          case _: InterruptedException =>
+            writer.close()
+        }
+      },
+      // Handle process output
+      out => {
+        val reader = new BufferedReader(new InputStreamReader(out))
+        try {
+          var line: String = null
+          while ({ line = reader.readLine(); line != null }) {
+            engineOutputQueue.put(line)
           }
-        },
-        // Handle process error
-        err => {
-          val reader = new BufferedReader(new InputStreamReader(err))
-          try {
-            var line: String = null
-            while ({ line = reader.readLine(); line != null }) {
-              val msg = s"spooky err> $line"
-              Log.log(msg)
-              chat(msg)
-            }
-          } finally {
-            reader.close()
+        } finally {
+          reader.close()
+        }
+      },
+      // Handle process error
+      err => {
+        val reader = new BufferedReader(new InputStreamReader(err))
+        try {
+          var line: String = null
+          while ({ line = reader.readLine(); line != null }) {
+            val msg = s"spooky err> $line"
+            Log.log(msg)
+            chat(msg)
           }
-        },
-        daemonizeThreads = true
-      )
+        } finally {
+          reader.close()
+        }
+      },
+      daemonizeThreads = true
+    )
 
-      val pb = Process(enginePath)
-      engineProcess = Some(pb.run(processIO))
+    val pb = Process(enginePath)
+    engineProcess = Some(pb.run(processIO))
 
-      // Initialize UCI engine
-      sendToEngine("umi")
-      waitForResponse("umiok")
-      sendToEngine("isready")
-      val _ = waitForResponse("readyok")
-      // sendToEngine("position config " + getConfig(gameState))
-    } catch {
-      case e: Exception =>
-        chat(s"Failed to start engine: ${e.getMessage}")
-        stopEngine()
-    }
+    // Initialize UCI engine
+    sendToEngine("umi")
+    waitForResponse("umiok")
+    sendToEngine("isready")
+    val _ = waitForResponse("readyok")
+    sendToEngine("config " + getConfig(game))
   }
 
   def stopEngine(): Unit = {
@@ -263,7 +257,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       case "haunt"               => 'H'
       case "shrieker"            => 'K'
       case "spectre"             => 'X'
-      case "rat"                 => 'A'
+      case "bone rat"            => 'A'
       case "sorcerer"            => 'U'
       case "witch"               => 'J'
       case "vampire"             => 'V'
@@ -293,6 +287,28 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     } else {
       char
     }
+  }
+
+  private def mapNameToFen(mapName: String): String = {
+    mapName.replaceAll(" ", "")
+  }
+
+  private def getConfig(gameState: GameState): String = {
+    val pointsToWin = gameState.game.targetNumWins
+    val maps = gameState.boardNames.map(mapNameToFen).mkString(",")
+    val techs =
+      gameState.game.techLine
+        .slice(2, gameState.game.techLine.length)
+        .map(t =>
+          t.tech match {
+            case PieceTech(pieceName) => fenChar(pieceName, S0)
+            case Copycat              => '1'
+            case TechSeller           => '2'
+            case Metamagic            => '3'
+          }
+        )
+        .mkString(",")
+    s"$pointsToWin $maps $techs"
   }
 
   private def convertUCIMoveToActions(
@@ -427,6 +443,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val y = locStr.charAt(1) - '0'
     Loc(x, y)
   }
+
   private def pieceNameFromFenChar(char: Char): PieceName = {
     char match {
       case 'Z' => "zombie"
