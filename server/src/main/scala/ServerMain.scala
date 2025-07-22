@@ -1217,7 +1217,8 @@ if(!username || username.length == 0) {
       actorSystem.actorOf(Props(classOf[GameActor], oldGameState, oldGameid))
     games = games + (oldGameid -> ((oldActor, oldGameState)))
     if (oldGameid.contains("ai")) {
-      addSpookyAI(oldGameState, oldGameid, false)
+      val enginePath = config.getString("app.spookyEnginePath")
+      addSpookyAI(oldGameState, oldGameid, enginePath)
     }
   }
 
