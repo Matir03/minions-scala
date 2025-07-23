@@ -666,8 +666,8 @@ object Units {
 
   // Pieces that start off buyable
   val alwaysAcquiredPieces: Array[PieceStats] = Array(
-    zombie,
-    acolyte
+    zombie
+    // acolyte
   )
 
   // Pieces that need to be unlocked, in order

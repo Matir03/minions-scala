@@ -32,7 +32,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   private val engineOutputQueue: BlockingQueue[String] =
     new LinkedBlockingQueue[String]()
 
-  private val attackers: Array[Map[Loc, Piece]] =
+  private val movers: Array[Map[Loc, Piece]] =
     Array.fill(game.numBoards)(Map())
 
   def makeActionId(): String = {
@@ -157,7 +157,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 
     case Protocol.ReportNewTurn(S1) if game.game.winner.isEmpty =>
       for (i <- 0 until game.numBoards) {
-        attackers(i) = Map()
+        movers(i) = Map()
       }
 
       // Get best move from engine
@@ -178,13 +178,13 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     def encodeTechState(techStates: Array[TechState]): String = {
       // For each tech, compute state
       val team0Spells = techStates
-        .slice(2, techStates.length)
+        .slice(1, techStates.length)
         .map { techState =>
           techState.level.apply(S0).toString.charAt(0)
         }
         .mkString("")
       val team1Spells = techStates
-        .slice(2, techStates.length)
+        .slice(1, techStates.length)
         .map { techState =>
           techState.level.apply(S1).toString.charAt(0)
         }
@@ -305,7 +305,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val maps = gameState.boardNames.map(mapNameToFen).mkString(",")
     val techs =
       gameState.game.techLine
-        .slice(2, gameState.game.techLine.length)
+        .slice(1, gameState.game.techLine.length)
         .map(t =>
           t.tech match {
             case PieceTech(pieceName) => fenChar(pieceName, S0)
@@ -361,11 +361,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 
           case "attack" =>
             val (fromLoc, toLoc) = parseLocPair(parts(4))
-            val attacker = if (attackers(boardIdx).contains(fromLoc)) {
-              attackers(boardIdx)(fromLoc)
-            } else {
-              game.boards(boardIdx).curState.pieces(fromLoc).head
-            }
+            val attacker = curPiece(boardIdx, fromLoc)
             val targetSpec =
               game.boards(boardIdx).curState.pieces(toLoc).head.spec
             val playerActions =
@@ -374,8 +370,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 
           case "blink" =>
             val blinkLoc = parseLocation(parts(4))
-            val pieceSpec =
-              game.boards(boardIdx).curState.pieces(blinkLoc).head.spec
+            val pieceSpec = curPiece(boardIdx, blinkLoc).spec
             val playerActions =
               PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
@@ -417,9 +412,17 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
           .map(i => Protocol.DoGameAction(PerformTech(side, idx + i)))
           .toList
         val acquireTech = acquire
-          .map(i => Protocol.DoGameAction(PerformTech(side, i + 2)))
+          .map(i => Protocol.DoGameAction(PerformTech(side, i + 1)))
           .toList
         buySpells ++ advanceTech ++ acquireTech
+    }
+  }
+
+  private def curPiece(boardIdx: Int, loc: Loc): Piece = {
+    if (movers(boardIdx).contains(loc)) {
+      movers(boardIdx)(loc)
+    } else {
+      game.boards(boardIdx).curState.pieces(loc).head
     }
   }
 
@@ -438,7 +441,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       case None => throw new Exception(s"Invalid move ${piece.loc} -> $toLoc")
       case Some((path, _)) => path
     }
-    attackers(boardIdx) += (toLoc -> piece)
+    movers(boardIdx) += (toLoc -> piece)
     Movement(piece.spec, path.toVector)
   }
 
