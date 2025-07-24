@@ -155,19 +155,31 @@ case class GameState(
     }
   }
 
-  private def doResetBoard(boardIdx: Int): Unit = {
-    // TODO: Another matter is how exactly you get your advanced Necromancer. The draw 3 choose 1 system is what we're using now, but large numbers of boards + Swarm being active can cause weird edge cases here (in 4 boards with a Swarm active, you only have your old Captain left to choose, rather degenerately)
-    val nNecros = 3
-    val necroNames = SideArray.createFn(side =>
-      necroRands(side)
-        .shuffle(Units.specialNecromancers.toList)
-        .map(_.name)
-        .take(nNecros)
-    )
+  private def doResetBoard(boardIdx: Int, justEnded: Boolean): Unit = {
+    // TODO(ritam): implement necromancer picking
+    // val nNecros = 3
+    val necroNames = SideArray.createFn(side => List(Units.necromancer.name))
+    // val necroNames = SideArray.createFn(side =>
+    //   necroRands(side)
+    //     .shuffle(Units.specialNecromancers.toList)
+    //     .map(_.name)
+    //     .take(nNecros)
+    // )
     val reinforcements = SideArray.create(Map[PieceName, Int]())
-    boards(boardIdx).resetBoard(necroNames, reinforcements, externalInfo)
+    val resetState = if (justEnded) JustEnded else Reset1
+    boards(boardIdx).resetBoard(
+      necroNames,
+      reinforcements,
+      externalInfo,
+      resetState
+    )
     broadcastAll(
-      Protocol.ReportResetBoard(boardIdx, necroNames, reinforcements)
+      Protocol.ReportResetBoard(
+        boardIdx,
+        necroNames,
+        reinforcements,
+        resetState
+      )
     )
   }
 
@@ -272,9 +284,9 @@ case class GameState(
       val board = boards(boardIdx)
       if (board.curState.hasWon) {
         doAddWin(oldSide, boardIdx)
-        if (game.winner.isEmpty) {
-          doResetBoard(boardIdx)
-        }
+        // if (game.winner.isEmpty) {
+        doResetBoard(boardIdx, justEnded = true)
+        // }
       }
     }
 
@@ -331,7 +343,7 @@ case class GameState(
 
     game.endTurn()
     boards.foreach { board => board.endTurn(externalInfo) }
-    broadcastAll(Protocol.ReportNewTurn(newSide))
+    // broadcastAll(Protocol.ReportNewTurn(newSide))
 
     refillUpcomingSpells()
 
@@ -341,12 +353,13 @@ case class GameState(
       if (board.curState.hasWon) {
         if (game.winner.isEmpty) {
           doAddWin(newSide, boardIdx)
-          if (game.winner.isEmpty) {
-            doResetBoard(boardIdx)
-          }
+          // if (game.winner.isEmpty) {
+          doResetBoard(boardIdx, justEnded = false)
+          // }
         }
       }
     }
+    broadcastAll(Protocol.ReportNewTurn(newSide))
 
     // Schedule the next end of turn
     game.winner match {
@@ -563,7 +576,7 @@ case class GameState(
                   // Check ahead of time if it's legal
                   game.tryIsLegal(gameAction).map { case () =>
                     // And if so, reset the board
-                    doResetBoard(boardIdx)
+                    doResetBoard(boardIdx, justEnded = true)
                     allMessages =
                       allMessages :+ ("GAME: Team " + game.curSide.toColorName + " resigned board " + (boardIdx + 1) + "!")
                     broadcastMessages()
@@ -858,7 +871,12 @@ object GameState {
       val boardsAndNames = chosenMaps.toArray.map { case (boardName, map) =>
         val state = map()
         val necroNames = SideArray.create(List(Units.necromancer.name))
-        state.resetBoard(necroNames, SideArray.create(Map()), externalInfo)
+        state.resetBoard(
+          necroNames,
+          SideArray.create(Map()),
+          externalInfo,
+          FirstTurn
+        )
 
         if (testingSetup) {
           state.tiles.foreachi { (loc, tile) =>

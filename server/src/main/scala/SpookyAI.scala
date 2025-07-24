@@ -163,7 +163,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       // Get best move from engine
       getBestMove().foreach { line =>
         // Convert each UCI action to game action and send them
-        val gameActions = convertUCIMoveToActions(line)
+        val gameActions = convertUMIMoveToActions(line)
         gameActions.foreach { action =>
           out ! action
         }
@@ -222,21 +222,30 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
         }
         .mkString("/")
 
-      val r0 = boardState
+      val rein0 = boardState
         .reinforcements(S0)
         .map { case (p, n) =>
           (0 until n).map(_ => fenChar(p, S0)).mkString("")
         }
         .mkString("")
 
-      val r1 = boardState
+      val rein1 = boardState
         .reinforcements(S1)
         .map { case (p, n) =>
           (0 until n).map(_ => fenChar(p, S1)).mkString("")
         }
         .mkString("")
 
-      s"n|$r0|$r1|||$position"
+      val reset = boardState.resetState match {
+        case FirstTurn => "f"
+        case Normal    => "n"
+        case Reset1    => "1"
+        case Reset2    => "2"
+        case JustEnded =>
+          throw new Exception("JustEnded should never be sent to the AI")
+      }
+
+      s"$reset|$rein0|$rein1|||$position"
     }
 
     val money = s"${game.game.souls(S0)}|${game.game.souls(S1)}"
@@ -318,7 +327,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     s"$pointsToWin $maps $techs"
   }
 
-  private def convertUCIMoveToActions(
+  private def convertUMIMoveToActions(
       uciMove: String
   ): List[Protocol.Query] = {
     val parts = uciMove.split(" ")
@@ -333,6 +342,24 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val actionId = makeActionId()
 
     actionType match {
+      case "b_setup" =>
+        val boardIdx = parts(2).toInt
+        val unitChar = parts(4).charAt(0)
+        val pieceName = pieceNameFromFenChar(unitChar)
+
+        val generalBoardAction =
+          DoGeneralBoardAction(
+            BuyReinforcement(pieceName, free = true),
+            actionId
+          )
+
+        List(
+          Protocol.DoBoardAction(
+            boardIdx,
+            generalBoardAction
+          )
+        )
+
       case "b_attack" =>
         val boardIdx = parts(2).toInt
         val boardActionType = parts(3)
@@ -383,7 +410,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
         boardActionType match {
           case "buy" =>
             val unitChar = parts(4).charAt(0)
-            val pieceName = pieceNameFromFenChar(unitChar.toUpper)
+            val pieceName = pieceNameFromFenChar(unitChar)
             val action =
               DoGeneralBoardAction(BuyReinforcement(pieceName, false), actionId)
             List(Protocol.DoBoardAction(boardIdx, action))
@@ -391,7 +418,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
           case "spawn" =>
             val unitChar = parts(4).charAt(0)
             val spawnLoc = parseLocation(parts(5))
-            val pieceName = pieceNameFromFenChar(unitChar.toUpper)
+            val pieceName = pieceNameFromFenChar(unitChar)
             val playerActions =
               PlayerActions(List(Spawn(spawnLoc, pieceName)), actionId)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
@@ -459,7 +486,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   }
 
   private def pieceNameFromFenChar(char: Char): PieceName = {
-    char match {
+    char.toUpper match {
       case 'Z' => "zombie"
       case 'I' => "initiate"
       case 'S' => "skeleton"

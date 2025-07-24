@@ -45,7 +45,8 @@ object Protocol {
   case class ReportResetBoard(
       boardIdx: Int,
       necroNames: SideArray[List[PieceName]],
-      reinforcements: SideArray[Map[PieceName, Int]]
+      reinforcements: SideArray[Map[PieceName, Int]],
+      resetState: ResetState
   ) extends Response
   case class ReportRevealSpells(spellsIdsAndNames: Array[(Int, SpellName)])
       extends Response
@@ -522,6 +523,7 @@ object Protocol {
         Map(
           "FirstTurn" -> ((_: JsValue) => JsSuccess(FirstTurn: ResetState)),
           "Normal" -> ((_: JsValue) => JsSuccess(Normal: ResetState)),
+          "JustEnded" -> ((_: JsValue) => JsSuccess(JustEnded: ResetState)),
           "Reset1" -> ((_: JsValue) => JsSuccess(Reset1: ResetState)),
           "Reset2" -> ((_: JsValue) => JsSuccess(Reset2: ResetState))
         )
@@ -530,6 +532,7 @@ object Protocol {
       def writes(t: ResetState): JsValue = t match {
         case (FirstTurn) => jsPair("FirstTurn", JsString(""))
         case (Normal)    => jsPair("Normal", JsString(""))
+        case (JustEnded) => jsPair("JustEnded", JsString(""))
         case (Reset1)    => jsPair("Reset1", JsString(""))
         case (Reset2)    => jsPair("Reset2", JsString(""))
       }

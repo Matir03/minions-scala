@@ -323,11 +323,24 @@ case class Piece private (
   }
 }
 
-sealed trait ResetState;
-case object FirstTurn extends ResetState;
-case object Normal extends ResetState;
-case object Reset1 extends ResetState;
-case object Reset2 extends ResetState;
+sealed trait ResetState {
+  def canSpawn: Boolean
+};
+case object FirstTurn extends ResetState {
+  def canSpawn = false
+};
+case object Normal extends ResetState {
+  def canSpawn = true
+};
+case object JustEnded extends ResetState {
+  def canSpawn = false
+};
+case object Reset1 extends ResetState {
+  def canSpawn = false
+};
+case object Reset2 extends ResetState {
+  def canSpawn = true
+};
 
 /** BoardState: The full state of one board of the game.
   */
@@ -359,7 +372,6 @@ object BoardState {
       hasWon = false,
       // canMove = false,
       // turnEndingImmediately = false,
-      canSpawn = false,
       resetState = FirstTurn,
       soulsThisRound = SideArray.create(0),
       totalSouls = SideArray.create(0),
@@ -413,7 +425,6 @@ case class BoardStateFragment1(
     var hasWon: Boolean,
     // var canMove: Boolean,
     // var turnEndingImmediately: Boolean,
-    var canSpawn: Boolean,
     var resetState: ResetState,
     val soulsThisRound: SideArray[Int],
     val totalSouls: SideArray[Int],
@@ -448,7 +459,6 @@ object BoardStateOfFragments {
       hasWon = f1.hasWon,
       // canMove = f1.canMove,
       // turnEndingImmediately = f1.turnEndingImmediately,
-      canSpawn = f1.canSpawn,
       resetState = f1.resetState,
       soulsThisRound = f1.soulsThisRound,
       totalSouls = f1.totalSouls,
@@ -511,7 +521,6 @@ case class BoardState private (
     // Set to true when a reset is happening that will be instantly followed by
     // a turn end, so that we don't update certain things as if this was "really" a turn.
     // var turnEndingImmediately: Boolean,
-    var canSpawn: Boolean, // false for FirstTurn and Reset1
     var resetState: ResetState,
 
     // Accumulated souls from spires and rebate for costs for units that died, this turn.
@@ -553,7 +562,6 @@ case class BoardState private (
         hasWon = hasWon,
         // canMove = canMove,
         // turnEndingImmediately = turnEndingImmediately,
-        canSpawn = canSpawn,
         resetState = resetState,
         soulsThisRound = soulsThisRound,
         totalSouls = totalSouls,
@@ -586,7 +594,6 @@ case class BoardState private (
       hasWon = hasWon,
       // canMove = canMove,
       // turnEndingImmediately = turnEndingImmediately,
-      canSpawn = canSpawn,
       resetState = resetState,
       soulsThisRound = soulsThisRound.copy(),
       totalSouls = totalSouls.copy(),
@@ -754,8 +761,9 @@ case class BoardState private (
 
     // Gain any free pieces we're supposed to, but only on turns we can actually play
     // if (canMove && !turnEndingImmediately) {
-    gainStartOfTurnReinforcements()
-    // }
+    if (resetState != JustEnded) {
+      gainStartOfTurnReinforcements()
+    }
 
     // Check for win conditions - start of turn at least 8 graveyards
     if (countGraveyards(side) >= 8) {
@@ -797,25 +805,27 @@ case class BoardState private (
     // We don't do this though if this is a turn end instantly after a reset, since
     // there is no time for the player to have non-automatedly chosen what piece they want.
     // if (!turnEndingImmediately) {
-    while (numFreeBuysAllowed(side) > 0) {
-      var bestPieceName: Option[String] = None
-      var bestPieceCost: Int = -1
-      var bestPieceIdx: Int = -1
-      allowedFreeBuyPieces(side).foreach { pieceName =>
-        val cost = externalInfo.pieceMap(pieceName).cost
-        val idx = Units.allPiecesIdx(pieceName)
-        if (
-          cost > bestPieceCost || (cost == bestPieceCost && idx > bestPieceIdx)
-        ) {
-          bestPieceName = Some(pieceName)
-          bestPieceCost = cost
-          bestPieceIdx = idx
+    if (resetState != JustEnded) {
+      while (numFreeBuysAllowed(side) > 0) {
+        var bestPieceName: Option[String] = None
+        var bestPieceCost: Int = -1
+        var bestPieceIdx: Int = -1
+        allowedFreeBuyPieces(side).foreach { pieceName =>
+          val cost = externalInfo.pieceMap(pieceName).cost
+          val idx = Units.allPiecesIdx(pieceName)
+          if (
+            cost > bestPieceCost || (cost == bestPieceCost && idx > bestPieceIdx)
+          ) {
+            bestPieceName = Some(pieceName)
+            bestPieceCost = cost
+            bestPieceIdx = idx
+          }
         }
+        bestPieceName.foreach { pieceName =>
+          addReinforcementInternal(side, pieceName)
+        }
+        numFreeBuysAllowed(side) -= 1
       }
-      bestPieceName.foreach { pieceName =>
-        addReinforcementInternal(side, pieceName)
-      }
-      numFreeBuysAllowed(side) -= 1
     }
     allowedFreeBuyPieces(side) = Set()
     numFreeBuysAllowed(side) = 0
@@ -844,14 +854,9 @@ case class BoardState private (
     resetState = resetState match {
       case FirstTurn => Normal
       case Normal    => Normal
+      case JustEnded => Reset1
       case Reset1    => Reset2
       case Reset2    => Normal
-    }
-    canSpawn = resetState match {
-      case FirstTurn => false
-      case Normal    => true
-      case Reset1    => false
-      case Reset2    => true
     }
 
     handleStartOfTurn()
@@ -863,7 +868,8 @@ case class BoardState private (
       // canMoveFirstTurn: Boolean,
       // turnEndingImmediatelyAfterReset: Boolean,
       new_reinforcements: SideArray[Map[PieceName, Int]],
-      externalInfo: ExternalInfo
+      externalInfo: ExternalInfo,
+      newResetState: ResetState
   ): Unit = {
     // Keep a piece around though as a free buy
     Side.foreach { side =>
@@ -902,8 +908,7 @@ case class BoardState private (
     hasWon = false
     // canMove = canMoveFirstTurn
     // turnEndingImmediately = turnEndingImmediatelyAfterReset
-    resetState = Reset1
-    canSpawn = false
+    resetState = newResetState
 
     // Set up initial pieces
     Side.foreach { side =>
@@ -1830,10 +1835,10 @@ case class BoardState private (
       externalInfo: ExternalInfo
   ): Try[Unit] = Try {
     failIf(turnNumber < 0, "Game is not started yet")
-    // failIf(
-    //   !canMove,
-    //   "After you win on graveyards, your opponent gets the first turn"
-    // )
+    failIf(
+      resetState == JustEnded,
+      "can't move after resigning"
+    )
     action match {
       case Movements(movements) =>
         // Check basic properties of the set of movements
@@ -1935,7 +1940,7 @@ case class BoardState private (
       case Spawn(spawnLoc, spawnName) =>
         // A bunch of tests that don't depend on the spawner or on reinforcements state
         val spawnStats = externalInfo.pieceMap(spawnName)
-        failUnless(canSpawn, "Cannot spawn on first turn of board")
+        failUnless(resetState.canSpawn, "Cannot spawn on first turn of board")
         trySpawnIsLegal(side, spawnStats, spawnLoc).get
         failUnless(
           isSpawnerInRange(spawnLoc, spawnStats),

@@ -692,10 +692,16 @@ case class Board private (
   def resetBoard(
       necroNames: SideArray[List[PieceName]],
       reinforcements: SideArray[Map[PieceName, Int]],
-      externalInfo: ExternalInfo
+      externalInfo: ExternalInfo,
+      resetState: ResetState
   ): Unit = {
     initialStateThisTurn = history.spawnState.copy()
-    initialStateThisTurn.resetBoard(necroNames, reinforcements, externalInfo)
+    initialStateThisTurn.resetBoard(
+      necroNames,
+      reinforcements,
+      externalInfo,
+      resetState
+    )
     actionsThisTurn = Vector()
     // TODO loses history information for recording purposes into playerGeneralBoardActionsPrevTurns
     // on endTurn()
