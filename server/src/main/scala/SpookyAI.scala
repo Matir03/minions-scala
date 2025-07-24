@@ -134,8 +134,8 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     lines
   }
 
-  def getBestMove(gameState: GameState): List[String] = {
-    sendToEngine("position fen " + convertGameStateToFEN(gameState))
+  def getBestMove(): List[String] = {
+    sendToEngine("position fen " + convertGameStateToFEN())
 
     sendToEngine("play nodes 1")
 
@@ -161,7 +161,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       }
 
       // Get best move from engine
-      getBestMove(game).foreach { line =>
+      getBestMove().foreach { line =>
         // Convert each UCI action to game action and send them
         val gameActions = convertUCIMoveToActions(line)
         gameActions.foreach { action =>
@@ -172,7 +172,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     case _ => ()
   }
 
-  private def convertGameStateToFEN(gameState: GameState): String = {
+  private def convertGameStateToFEN(): String = {
     /// fen <money> <board_points> <tech_state> <board_fen> ... <board_fen> <side_to_move> <turn_num>
 
     def encodeTechState(techStates: Array[TechState]): String = {
@@ -239,15 +239,15 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       s"n|$r0|$r1|||$position"
     }
 
-    val money = s"${gameState.game.souls(S0)}|${gameState.game.souls(S1)}"
-    val boardPoints = s"${gameState.game.wins(S0)}|${gameState.game.wins(S1)}"
-    val techState = encodeTechState(gameState.game.techLine)
+    val money = s"${game.game.souls(S0)}|${game.game.souls(S1)}"
+    val boardPoints = s"${game.game.wins(S0)}|${game.game.wins(S1)}"
+    val techState = encodeTechState(game.game.techLine)
     // Encode each board's position and spells
-    val boards = gameState.boards
+    val boards = game.boards
       .map { board => encodeBoardPosition(board) }
       .mkString(" ")
-    val side = gameState.game.curSide.int
-    val turnNum = gameState.game.turnNumber
+    val side = game.game.curSide.int
+    val turnNum = game.game.turnNumber
 
     s"$money $boardPoints $techState $boards $side $turnNum"
   }

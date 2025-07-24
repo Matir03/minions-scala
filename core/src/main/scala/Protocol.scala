@@ -11,35 +11,65 @@ object Protocol {
   case class Version(version: String) extends Response
   case class QueryError(err: String) extends Response
   case class Messages(all: List[String], team: List[String]) extends Response
-  case class Players(playersAndViewedBoards: SideArray[List[(String,Int)]], spectators: List[String]) extends Response
+  case class Players(
+      playersAndViewedBoards: SideArray[List[(String, Int)]],
+      spectators: List[String]
+  ) extends Response
   case class ClientHeartbeatRate(periodInSeconds: Double) extends Response
   case class OkHeartbeat(i: Int) extends Response
-  case class Initialize(game: Game, summaries: Array[BoardSummary], boardNames: Array[String], boardSequences: Array[Int], initialSpells: Array[(Int,SpellName)]) extends Response
+  case class Initialize(
+      game: Game,
+      summaries: Array[BoardSummary],
+      boardNames: Array[String],
+      boardSequences: Array[Int],
+      initialSpells: Array[(Int, SpellName)]
+  ) extends Response
   case class UserJoined(username: String, side: Option[Side]) extends Response
   case class UserLeft(username: String, side: Option[Side]) extends Response
-  case class OkBoardAction(boardIdx: Int, newBoardSequence: Int) extends Response
+  case class OkBoardAction(boardIdx: Int, newBoardSequence: Int)
+      extends Response
   case class OkGameAction(newGameSequence: Int) extends Response
-  case class ReportBoardHistory(boardIdx: Int, summary: BoardSummary, newBoardSequence: Int) extends Response
-  case class ReportBoardAction(boardIdx: Int, boardAction: BoardAction, newBoardSequence: Int) extends Response
-  case class ReportGameAction(gameAction: GameAction, newGameSequence: Int) extends Response
+  case class ReportBoardHistory(
+      boardIdx: Int,
+      summary: BoardSummary,
+      newBoardSequence: Int
+  ) extends Response
+  case class ReportBoardAction(
+      boardIdx: Int,
+      boardAction: BoardAction,
+      newBoardSequence: Int
+  ) extends Response
+  case class ReportGameAction(gameAction: GameAction, newGameSequence: Int)
+      extends Response
   case class ReportNewTurn(newSide: Side) extends Response
-  case class ReportResetBoard(boardIdx: Int, necroNames:SideArray[List[PieceName]], canMoveFirstTurn: Boolean, turnEndingImmediatelyAfterReset: Boolean, reinforcements: SideArray[Map[PieceName, Int]]) extends Response
-  case class ReportRevealSpells(spellsIdsAndNames: Array[(Int,SpellName)]) extends Response
+  case class ReportResetBoard(
+      boardIdx: Int,
+      necroNames: SideArray[List[PieceName]],
+      reinforcements: SideArray[Map[PieceName, Int]]
+  ) extends Response
+  case class ReportRevealSpells(spellsIdsAndNames: Array[(Int, SpellName)])
+      extends Response
   case class ReportTimeLeft(timeLeft: Double) extends Response
-  case class ReportPause(isPaused:Boolean) extends Response
+  case class ReportPause(isPaused: Boolean) extends Response
 
   sealed trait Query
   case class Heartbeat(i: Int) extends Query
   case class RequestBoardHistory(boardIdx: Int) extends Query
-  case class DoBoardAction(boardIdx: Int, boardAction: BoardAction) extends Query
+  case class DoBoardAction(boardIdx: Int, boardAction: BoardAction)
+      extends Query
   case class DoGameAction(gameAction: GameAction) extends Query
-  case class Chat(username: String, side: Option[Side], allChat: Boolean, message: String) extends Query
-  case class RequestPause(isPaused:Boolean) extends Query
+  case class Chat(
+      username: String,
+      side: Option[Side],
+      allChat: Boolean,
+      message: String
+  ) extends Query
+  case class RequestPause(isPaused: Boolean) extends Query
   case class ReportViewedBoard(boardIdx: Int) extends Query
 
-  //Conversions----------------------------------------------------
+  // Conversions----------------------------------------------------
   def readsFromString[T](typeName: String)(f: String => T): Reads[T] = {
-    new Reads[T]{
+    new Reads[T] {
       def reads(json: JsValue): JsResult[T] = json match {
         case JsString(s) => JsSuccess(f(s))
         case _ => JsError("JSON string value expected when parsing " + typeName)
@@ -47,23 +77,26 @@ object Protocol {
     }
   }
   def writesToString[T](f: T => String): Writes[T] = {
-    new Writes[T]{
+    new Writes[T] {
       def writes(t: T): JsValue = JsString(f(t))
     }
   }
 
-  def readsFromPair[T](typeName: String, convMap: Map[String, (JsValue => JsResult[T])]): Reads[T] = {
-    new Reads[T]{
+  def readsFromPair[T](
+      typeName: String,
+      convMap: Map[String, (JsValue => JsResult[T])]
+  ): Reads[T] = {
+    new Reads[T] {
       def fail(): JsResult[T] =
         JsError("JSON (string*value) pair expected when parsing " + typeName)
       def reads(json: JsValue): JsResult[T] = json match {
         case JsArray(arr) =>
-          if(arr.length != 2) fail()
+          if (arr.length != 2) fail()
           else {
             arr(0) match {
               case JsString(s) =>
                 convMap.get(s) match {
-                  case None => fail()
+                  case None    => fail()
                   case Some(f) => f(arr(1))
                 }
               case _ => fail()
@@ -74,34 +107,37 @@ object Protocol {
     }
   }
   def jsPair(variantName: String, jsValue: JsValue): JsValue = {
-    JsArray(Array(JsString(variantName),jsValue))
+    JsArray(Array(JsString(variantName), jsValue))
   }
 
-  def readsFromTuple2[T](typeName: String, f:((JsValue,JsValue) => JsResult[T])): Reads[T] = {
-    new Reads[T]{
+  def readsFromTuple2[T](
+      typeName: String,
+      f: ((JsValue, JsValue) => JsResult[T])
+  ): Reads[T] = {
+    new Reads[T] {
       def fail(): JsResult[T] =
         JsError("JSON pair expected when parsing " + typeName)
       def reads(json: JsValue): JsResult[T] = json match {
         case JsArray(arr) => {
-          if(arr.length != 2) fail()
-          else f(arr(0),arr(1))
+          if (arr.length != 2) fail()
+          else f(arr(0), arr(1))
         }
         case _ => fail()
       }
     }
   }
   def jsTuple2(jsValue0: JsValue, jsValue1: JsValue): JsValue = {
-    JsArray(Array(jsValue0,jsValue1))
+    JsArray(Array(jsValue0, jsValue1))
   }
 
-  //CommonTypes.scala--------------------------------------------------------------------------------
+  // CommonTypes.scala--------------------------------------------------------------------------------
   implicit val locFormat = Json.format[Loc]
   implicit val vecFormat = Json.format[Vec]
 
   implicit val sideFormat = {
     val reads: Reads[Side] = readsFromString[Side]("Side")(Side.ofString)
     val writes: Writes[Side] = writesToString[Side](side => side.toString)
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val spawnerFormat = Json.format[Spawner]
@@ -110,129 +146,160 @@ object Protocol {
   implicit val firestormFormat = Json.format[Firestorm]
   implicit val whirlwindFormat = Json.format[Whirlwind]
   implicit val terrainFormat = {
-    val reads: Reads[Terrain] = readsFromPair[Terrain]("Terrain",Map(
-      "Wall" -> ((_:JsValue) => JsSuccess(Wall: Terrain)),
-      "Ground" -> ((_:JsValue) => JsSuccess(Ground: Terrain)),
-      "Water" -> ((json:JsValue) => waterFormat.reads(json)),
-      "Graveyard" -> ((_:JsValue) => JsSuccess(Graveyard: Terrain)),
-      "SorceryNode" -> ((_:JsValue) => JsSuccess(SorceryNode: Terrain)),
-      "Teleporter" -> ((_:JsValue) => JsSuccess(Teleporter: Terrain)),
-      "Spawner" -> ((json:JsValue) => spawnerFormat.reads(json)),
-      "Mist" -> ((_:JsValue) => JsSuccess(Mist: Terrain)),
-      "Earthquake" -> ((json:JsValue) => earthquakeFormat.reads(json)),
-      "Firestorm" -> ((json:JsValue) => firestormFormat.reads(json)),
-      "Whirlwind" -> ((json:JsValue) => whirlwindFormat.reads(json)),
-    ))
+    val reads: Reads[Terrain] = readsFromPair[Terrain](
+      "Terrain",
+      Map(
+        "Wall" -> ((_: JsValue) => JsSuccess(Wall: Terrain)),
+        "Ground" -> ((_: JsValue) => JsSuccess(Ground: Terrain)),
+        "Water" -> ((json: JsValue) => waterFormat.reads(json)),
+        "Graveyard" -> ((_: JsValue) => JsSuccess(Graveyard: Terrain)),
+        "SorceryNode" -> ((_: JsValue) => JsSuccess(SorceryNode: Terrain)),
+        "Teleporter" -> ((_: JsValue) => JsSuccess(Teleporter: Terrain)),
+        "Spawner" -> ((json: JsValue) => spawnerFormat.reads(json)),
+        "Mist" -> ((_: JsValue) => JsSuccess(Mist: Terrain)),
+        "Earthquake" -> ((json: JsValue) => earthquakeFormat.reads(json)),
+        "Firestorm" -> ((json: JsValue) => firestormFormat.reads(json)),
+        "Whirlwind" -> ((json: JsValue) => whirlwindFormat.reads(json))
+      )
+    )
     val writes: Writes[Terrain] = new Writes[Terrain] {
       def writes(t: Terrain): JsValue = t match {
-        case (Wall) => jsPair("Wall",JsString(""))
-        case (Ground) => jsPair("Ground",JsString(""))
-        case (t:Water) => jsPair("Water",waterFormat.writes(t))
-        case (Graveyard) => jsPair("Graveyard",JsString(""))
-        case (SorceryNode) => jsPair("SorceryNode",JsString(""))
-        case (Teleporter) => jsPair("Teleporter",JsString(""))
-        case (t:Spawner) => jsPair("Spawner",spawnerFormat.writes(t))
-        case (Mist) => jsPair("Mist",JsString(""))
-        case (t:Earthquake) => jsPair("Earthquake", earthquakeFormat.writes(t))
-        case (t:Firestorm) => jsPair("Firestorm", firestormFormat.writes(t))
-        case (t:Whirlwind) => jsPair("Whirlwind", whirlwindFormat.writes(t))
+        case (Wall)          => jsPair("Wall", JsString(""))
+        case (Ground)        => jsPair("Ground", JsString(""))
+        case (t: Water)      => jsPair("Water", waterFormat.writes(t))
+        case (Graveyard)     => jsPair("Graveyard", JsString(""))
+        case (SorceryNode)   => jsPair("SorceryNode", JsString(""))
+        case (Teleporter)    => jsPair("Teleporter", JsString(""))
+        case (t: Spawner)    => jsPair("Spawner", spawnerFormat.writes(t))
+        case (Mist)          => jsPair("Mist", JsString(""))
+        case (t: Earthquake) => jsPair("Earthquake", earthquakeFormat.writes(t))
+        case (t: Firestorm)  => jsPair("Firestorm", firestormFormat.writes(t))
+        case (t: Whirlwind)  => jsPair("Whirlwind", whirlwindFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val pieceAbilityFormat = {
-    val reads: Reads[PieceAbility] = readsFromPair[PieceAbility]("PieceAbility",
-      (Abilities.abilities.map (t => (t.name -> ((_:JsValue) => JsSuccess(t: PieceAbility))))).toMap
+    val reads: Reads[PieceAbility] = readsFromPair[PieceAbility](
+      "PieceAbility",
+      (Abilities.abilities
+        .map(t => (t.name -> ((_: JsValue) => JsSuccess(t: PieceAbility)))))
+        .toMap
     )
     val writes: Writes[PieceAbility] = new Writes[PieceAbility] {
       def writes(t: PieceAbility): JsValue = jsPair(t.name, JsString(""))
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
-  def mapJsResults[T,U:ClassTag](arr:IndexedSeq[T])(f: T => JsResult[U]): JsResult[Array[U]] = {
+  def mapJsResults[T, U: ClassTag](
+      arr: IndexedSeq[T]
+  )(f: T => JsResult[U]): JsResult[Array[U]] = {
     val len = arr.length
     def loop(acc: List[U], idx: Int): JsResult[Array[U]] = {
-      if(idx >= len)
+      if (idx >= len)
         JsSuccess(acc.toArray.reverse)
       else {
         f(arr(idx)) match {
-          case (e: JsError) => e
-          case (s: JsSuccess[U]) => loop(s.get :: acc, idx+1)
+          case (e: JsError)      => e
+          case (s: JsSuccess[U]) => loop(s.get :: acc, idx + 1)
         }
       }
     }
-    loop(Nil,0)
+    loop(Nil, 0)
   }
 
-  implicit def sideArrayFormat[T:ClassTag](implicit format: Format[T]) : Format[SideArray[T]] = {
+  implicit def sideArrayFormat[T: ClassTag](implicit
+      format: Format[T]
+  ): Format[SideArray[T]] = {
     new Format[SideArray[T]] {
       def fail(): JsResult[SideArray[T]] =
         JsError("JSON pair expected when parsing side array")
       def reads(json: JsValue): JsResult[SideArray[T]] = json match {
         case JsArray(arr) =>
-          if(arr.length != 2) fail()
-          else mapJsResults(arr)(format.reads).map{ (arr:Array[T]) => SideArray.ofArrayInplace(arr) }
+          if (arr.length != 2) fail()
+          else
+            mapJsResults(arr)(format.reads).map { (arr: Array[T]) =>
+              SideArray.ofArrayInplace(arr)
+            }
         case _ => fail()
       }
       def writes(sa: SideArray[T]): JsValue = {
         val arr = sa.toArrayInplace
-        JsArray(Array(format.writes(arr(0)),format.writes(arr(1))))
+        JsArray(Array(format.writes(arr(0)), format.writes(arr(1))))
       }
     }
   }
 
-  implicit def mapFormat[T:ClassTag,U:ClassTag](implicit formatKey: Format[T], formatValue: Format[U]): Format[Map[T,U]] = {
-    new Format[Map[T,U]] {
-      def reads(json: JsValue): JsResult[Map[T,U]] = {
-        Json.fromJson[List[(T,U)]](json).map { list => list.toMap }
+  implicit def mapFormat[T: ClassTag, U: ClassTag](implicit
+      formatKey: Format[T],
+      formatValue: Format[U]
+  ): Format[Map[T, U]] = {
+    new Format[Map[T, U]] {
+      def reads(json: JsValue): JsResult[Map[T, U]] = {
+        Json.fromJson[List[(T, U)]](json).map { list => list.toMap }
       }
-      def writes(map: Map[T,U]): JsValue = {
+      def writes(map: Map[T, U]): JsValue = {
         Json.toJson(map.toList)
       }
     }
   }
 
   implicit val planeTopologyFormat = {
-    val reads: Reads[PlaneTopology] = readsFromString[PlaneTopology]("PlaneTopology")(PlaneTopology.ofString)
-    val writes: Writes[PlaneTopology] = writesToString[PlaneTopology](planeTopology => planeTopology.toString)
-    Format(reads,writes)
+    val reads: Reads[PlaneTopology] =
+      readsFromString[PlaneTopology]("PlaneTopology")(PlaneTopology.ofString)
+    val writes: Writes[PlaneTopology] =
+      writesToString[PlaneTopology](planeTopology => planeTopology.toString)
+    Format(reads, writes)
   }
 
-  implicit def planeFormat[T:ClassTag](implicit format: Format[T]) : Format[Plane[T]] = {
+  implicit def planeFormat[T: ClassTag](implicit
+      format: Format[T]
+  ): Format[Plane[T]] = {
     import play.api.libs.json.Reads._
     import play.api.libs.functional.syntax._
-    def getValue(obj:scala.collection.Map[String,JsValue], str: String): JsResult[JsValue] = {
+    def getValue(
+        obj: scala.collection.Map[String, JsValue],
+        str: String
+    ): JsResult[JsValue] = {
       obj.get(str) match {
         case None => JsError("When parsing plane failed to find field: " + str)
         case Some(x) => JsSuccess(x)
       }
     }
-    def getArray(obj:scala.collection.Map[String,JsValue], str: String): JsResult[IndexedSeq[JsValue]] = {
+    def getArray(
+        obj: scala.collection.Map[String, JsValue],
+        str: String
+    ): JsResult[IndexedSeq[JsValue]] = {
       obj.get(str) match {
         case None => JsError("When parsing plane failed to find field: " + str)
         case Some(JsArray(x)) => JsSuccess(x)
-        case Some(_) => JsError("When parsing plane field " + str + " was not an array")
+        case Some(_) =>
+          JsError("When parsing plane field " + str + " was not an array")
       }
     }
-    def getInt(obj:scala.collection.Map[String,JsValue], str: String): JsResult[Int] = {
+    def getInt(
+        obj: scala.collection.Map[String, JsValue],
+        str: String
+    ): JsResult[Int] = {
       obj.get(str) match {
         case None => JsError("When parsing plane failed to find field: " + str)
         case Some(JsNumber(x)) => JsSuccess(x.intValue)
-        case Some(_) => JsError("When parsing plane field " + str + " was not an integer")
+        case Some(_) =>
+          JsError("When parsing plane field " + str + " was not an integer")
       }
     }
     new Format[Plane[T]] {
       def reads(json: JsValue): JsResult[Plane[T]] = json match {
         case JsObject(obj) =>
-          getInt(obj,"xSize").flatMap { xSize =>
-            getInt(obj,"ySize").flatMap { ySize =>
-              getValue(obj,"topology").flatMap { topology =>
+          getInt(obj, "xSize").flatMap { xSize =>
+            getInt(obj, "ySize").flatMap { ySize =>
+              getValue(obj, "topology").flatMap { topology =>
                 planeTopologyFormat.reads(topology).flatMap { topology =>
-                  getArray(obj,"arr").flatMap { arr =>
-                    mapJsResults(arr)(format.reads).map { (arr:Array[T]) =>
-                      new Plane(xSize,ySize,topology,arr)
+                  getArray(obj, "arr").flatMap { arr =>
+                    mapJsResults(arr)(format.reads).map { (arr: Array[T]) =>
+                      new Plane(xSize, ySize, topology, arr)
                     }
                   }
                 }
@@ -242,31 +309,42 @@ object Protocol {
         case _ => JsError("JSON object expected when parsing plane")
       }
       def writes(plane: Plane[T]): JsValue = {
-        JsObject(Map(
-          "xSize" -> JsNumber(plane.xSize),
-          "ySize" -> JsNumber(plane.ySize),
-          "topology" -> planeTopologyFormat.writes(plane.topology),
-          "arr" -> JsArray(plane.getArrayInplace.map(format.writes))
-        ))
+        JsObject(
+          Map(
+            "xSize" -> JsNumber(plane.xSize),
+            "ySize" -> JsNumber(plane.ySize),
+            "topology" -> planeTopologyFormat.writes(plane.topology),
+            "arr" -> JsArray(plane.getArrayInplace.map(format.writes))
+          )
+        )
       }
     }
   }
 
-  //BoardState.scala--------------------------------------------------------------------------------
+  // BoardState.scala--------------------------------------------------------------------------------
   implicit val startedTurnWithIDFormat = Json.format[StartedTurnWithID]
   implicit val spawnedThisTurnFormat = Json.format[SpawnedThisTurn]
   implicit val pieceSpecFormat = {
-    val reads: Reads[PieceSpec] = readsFromPair[PieceSpec]("PieceSpec",Map(
-      "StartedTurnWithID" -> ((json:JsValue) => startedTurnWithIDFormat.reads(json)),
-      "SpawnedThisTurn" -> ((json:JsValue) => spawnedThisTurnFormat.reads(json))
-    ))
+    val reads: Reads[PieceSpec] = readsFromPair[PieceSpec](
+      "PieceSpec",
+      Map(
+        "StartedTurnWithID" -> ((json: JsValue) =>
+          startedTurnWithIDFormat.reads(json)
+        ),
+        "SpawnedThisTurn" -> ((json: JsValue) =>
+          spawnedThisTurnFormat.reads(json)
+        )
+      )
+    )
     val writes: Writes[PieceSpec] = new Writes[PieceSpec] {
       def writes(t: PieceSpec): JsValue = t match {
-        case (t:StartedTurnWithID) => jsPair("StartedTurnWithID",startedTurnWithIDFormat.writes(t))
-        case (t:SpawnedThisTurn) => jsPair("SpawnedThisTurn",spawnedThisTurnFormat.writes(t))
+        case (t: StartedTurnWithID) =>
+          jsPair("StartedTurnWithID", startedTurnWithIDFormat.writes(t))
+        case (t: SpawnedThisTurn) =>
+          jsPair("SpawnedThisTurn", spawnedThisTurnFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val movementFormat = Json.format[Movement]
@@ -282,73 +360,92 @@ object Protocol {
   implicit val playSpellFormat = Json.format[PlaySpell]
   implicit val discardSpellFormat = Json.format[DiscardSpell]
   implicit val playerActionFormat = {
-    val reads: Reads[PlayerAction] = readsFromPair[PlayerAction]("PlayerAction",Map(
-      "Movements" -> ((json:JsValue) => movementsFormat.reads(json)),
-      "Attack" -> ((json:JsValue) => attackFormat.reads(json)),
-      "Spawn" -> ((json:JsValue) => spawnFormat.reads(json)),
-      "ActivateTile" -> ((json:JsValue) => activateTileFormat.reads(json)),
-      "ActivateAbility" -> ((json:JsValue) => activateAbilityFormat.reads(json)),
-      "Blink" -> ((json:JsValue) => blinkFormat.reads(json)),
-      "Teleport" -> ((json:JsValue) => teleportFormat.reads(json)),
-      "PlaySpell" -> ((json:JsValue) => playSpellFormat.reads(json)),
-      "DiscardSpell" -> ((json:JsValue) => discardSpellFormat.reads(json))
-    ))
+    val reads: Reads[PlayerAction] = readsFromPair[PlayerAction](
+      "PlayerAction",
+      Map(
+        "Movements" -> ((json: JsValue) => movementsFormat.reads(json)),
+        "Attack" -> ((json: JsValue) => attackFormat.reads(json)),
+        "Spawn" -> ((json: JsValue) => spawnFormat.reads(json)),
+        "ActivateTile" -> ((json: JsValue) => activateTileFormat.reads(json)),
+        "ActivateAbility" -> ((json: JsValue) =>
+          activateAbilityFormat.reads(json)
+        ),
+        "Blink" -> ((json: JsValue) => blinkFormat.reads(json)),
+        "Teleport" -> ((json: JsValue) => teleportFormat.reads(json)),
+        "PlaySpell" -> ((json: JsValue) => playSpellFormat.reads(json)),
+        "DiscardSpell" -> ((json: JsValue) => discardSpellFormat.reads(json))
+      )
+    )
     val writes: Writes[PlayerAction] = new Writes[PlayerAction] {
       def writes(t: PlayerAction): JsValue = t match {
-        case (t:Movements) => jsPair("Movements",movementsFormat.writes(t))
-        case (t:Attack) => jsPair("Attack",attackFormat.writes(t))
-        case (t:Spawn) => jsPair("Spawn",spawnFormat.writes(t))
-        case (t:ActivateTile) => jsPair("ActivateTile",activateTileFormat.writes(t))
-        case (t:ActivateAbility) => jsPair("ActivateAbility",activateAbilityFormat.writes(t))
-        case (t:Blink) => jsPair("Blink",blinkFormat.writes(t))
-        case (t:Teleport) => jsPair("Teleport",teleportFormat.writes(t))
-        case (t:PlaySpell) => jsPair("PlaySpell",playSpellFormat.writes(t))
-        case (t:DiscardSpell) => jsPair("DiscardSpell",discardSpellFormat.writes(t))
+        case (t: Movements) => jsPair("Movements", movementsFormat.writes(t))
+        case (t: Attack)    => jsPair("Attack", attackFormat.writes(t))
+        case (t: Spawn)     => jsPair("Spawn", spawnFormat.writes(t))
+        case (t: ActivateTile) =>
+          jsPair("ActivateTile", activateTileFormat.writes(t))
+        case (t: ActivateAbility) =>
+          jsPair("ActivateAbility", activateAbilityFormat.writes(t))
+        case (t: Blink)     => jsPair("Blink", blinkFormat.writes(t))
+        case (t: Teleport)  => jsPair("Teleport", teleportFormat.writes(t))
+        case (t: PlaySpell) => jsPair("PlaySpell", playSpellFormat.writes(t))
+        case (t: DiscardSpell) =>
+          jsPair("DiscardSpell", discardSpellFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val buyReinforcementFormat = Json.format[BuyReinforcement]
   implicit val gainSpellFormat = Json.format[GainSpell]
   implicit val generalBoardActionFormat = {
-    val reads: Reads[GeneralBoardAction] = readsFromPair[GeneralBoardAction]("GeneralBoardAction",Map(
-      "BuyReinforcement" -> ((json:JsValue) => buyReinforcementFormat.reads(json)),
-      "GainSpell" -> ((json:JsValue) => gainSpellFormat.reads(json)),
-    ))
+    val reads: Reads[GeneralBoardAction] = readsFromPair[GeneralBoardAction](
+      "GeneralBoardAction",
+      Map(
+        "BuyReinforcement" -> ((json: JsValue) =>
+          buyReinforcementFormat.reads(json)
+        ),
+        "GainSpell" -> ((json: JsValue) => gainSpellFormat.reads(json))
+      )
+    )
     val writes: Writes[GeneralBoardAction] = new Writes[GeneralBoardAction] {
       def writes(t: GeneralBoardAction): JsValue = t match {
-        case (t:BuyReinforcement) => jsPair("BuyReinforcement",buyReinforcementFormat.writes(t))
-        case (t:GainSpell) => jsPair("GainSpell",gainSpellFormat.writes(t))
+        case (t: BuyReinforcement) =>
+          jsPair("BuyReinforcement", buyReinforcementFormat.writes(t))
+        case (t: GainSpell) => jsPair("GainSpell", gainSpellFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val pieceModFormat = {
-    val reads: Reads[PieceMod] = readsFromString[PieceMod]("PieceMod")(PieceMod.ofString)
-    val writes: Writes[PieceMod] = writesToString[PieceMod](pieceMod => pieceMod.toString)
-    Format(reads,writes)
+    val reads: Reads[PieceMod] =
+      readsFromString[PieceMod]("PieceMod")(PieceMod.ofString)
+    val writes: Writes[PieceMod] =
+      writesToString[PieceMod](pieceMod => pieceMod.toString)
+    Format(reads, writes)
   }
 
   implicit val movingFormat = Json.format[Moving]
   implicit val attackingFormat = Json.format[Attacking]
   implicit val actStateFormat = {
-    val reads: Reads[ActState] = readsFromPair[ActState]("ActState",Map(
-      "Moving" -> ((json:JsValue) => movingFormat.reads(json)),
-      "Attacking" -> ((json:JsValue) => attackingFormat.reads(json)),
-      "Spawning" -> ((_:JsValue) => JsSuccess(Spawning: ActState)),
-      "DoneActing" -> ((_:JsValue) => JsSuccess(DoneActing: ActState)),
-    ))
+    val reads: Reads[ActState] = readsFromPair[ActState](
+      "ActState",
+      Map(
+        "Moving" -> ((json: JsValue) => movingFormat.reads(json)),
+        "Attacking" -> ((json: JsValue) => attackingFormat.reads(json)),
+        "Spawning" -> ((_: JsValue) => JsSuccess(Spawning: ActState)),
+        "DoneActing" -> ((_: JsValue) => JsSuccess(DoneActing: ActState))
+      )
+    )
     val writes: Writes[ActState] = new Writes[ActState] {
       def writes(t: ActState): JsValue = t match {
-        case (t:Moving) => jsPair("Moving",movingFormat.writes(t))
-        case (t:Attacking) => jsPair("Attacking",attackingFormat.writes(t))
-        case (Spawning) => jsPair("Spawning",JsString(""))
-        case (DoneActing) => jsPair("DoneActing",JsString(""))
+        case (t: Moving)    => jsPair("Moving", movingFormat.writes(t))
+        case (t: Attacking) => jsPair("Attacking", attackingFormat.writes(t))
+        case (Spawning)     => jsPair("Spawning", JsString(""))
+        case (DoneActing)   => jsPair("DoneActing", JsString(""))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val pieceModWithDurationFormat = Json.format[PieceModWithDuration]
@@ -357,49 +454,88 @@ object Protocol {
   implicit val damageFormat = Json.format[Damage]
   implicit val transformIntoFormat = Json.format[TransformInto]
   implicit val targetEffectFormat = {
-    val reads: Reads[TargetEffect] = readsFromPair[TargetEffect]("Terrain",Map(
-      "Kill" -> ((_:JsValue) => JsSuccess(Kill: TargetEffect)),
-      "Unsummon" -> ((_:JsValue) => JsSuccess(Unsummon: TargetEffect)),
-      "Enchant" -> ((json:JsValue) => enchantFormat.reads(json)),
-      "Damage" -> ((json:JsValue) => damageFormat.reads(json)),
-      "TransformInto" -> ((json:JsValue) => transformIntoFormat.reads(json)),
-    ))
+    val reads: Reads[TargetEffect] = readsFromPair[TargetEffect](
+      "Terrain",
+      Map(
+        "Kill" -> ((_: JsValue) => JsSuccess(Kill: TargetEffect)),
+        "Unsummon" -> ((_: JsValue) => JsSuccess(Unsummon: TargetEffect)),
+        "Enchant" -> ((json: JsValue) => enchantFormat.reads(json)),
+        "Damage" -> ((json: JsValue) => damageFormat.reads(json)),
+        "TransformInto" -> ((json: JsValue) => transformIntoFormat.reads(json))
+      )
+    )
     val writes: Writes[TargetEffect] = new Writes[TargetEffect] {
       def writes(t: TargetEffect): JsValue = t match {
-        case (Kill) => jsPair("Kill",JsString(""))
-        case (Unsummon) => jsPair("Unsummon",JsString(""))
-        case (t:Enchant) => jsPair("Enchant",enchantFormat.writes(t))
-        case (t:Damage) => jsPair("Damage",damageFormat.writes(t))
-        case (t:TransformInto) => jsPair("TransformInto",transformIntoFormat.writes(t))
+        case (Kill)       => jsPair("Kill", JsString(""))
+        case (Unsummon)   => jsPair("Unsummon", JsString(""))
+        case (t: Enchant) => jsPair("Enchant", enchantFormat.writes(t))
+        case (t: Damage)  => jsPair("Damage", damageFormat.writes(t))
+        case (t: TransformInto) =>
+          jsPair("TransformInto", transformIntoFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val pieceStatsFragment0Format = Json.format[PieceStatsFragment0]
   implicit val pieceStatsFragment1Format = Json.format[PieceStatsFragment1]
 
   implicit val pieceStatsFormat = {
-    val reads: Reads[PieceStats] = readsFromTuple2[PieceStats]("PieceStats",((json0:JsValue,json1:JsValue) => {
-      val fragment0 : JsResult[PieceStatsFragment0] = pieceStatsFragment0Format.reads(json0)
-      val fragment1 : JsResult[PieceStatsFragment1] = pieceStatsFragment1Format.reads(json1)
-        (fragment0,fragment1) match {
-        case (err: JsError,_) => err
-        case (_,err: JsError) => err
-        case (f0: JsSuccess[PieceStatsFragment0],f1: JsSuccess[PieceStatsFragment1]) =>
-          JsSuccess(PieceStatsOfFragments.ofFragments(f0.get,f1.get))
-      }
-    }))
+    val reads: Reads[PieceStats] = readsFromTuple2[PieceStats](
+      "PieceStats",
+      (
+          (json0: JsValue, json1: JsValue) => {
+            val fragment0: JsResult[PieceStatsFragment0] =
+              pieceStatsFragment0Format.reads(json0)
+            val fragment1: JsResult[PieceStatsFragment1] =
+              pieceStatsFragment1Format.reads(json1)
+            (fragment0, fragment1) match {
+              case (err: JsError, _) => err
+              case (_, err: JsError) => err
+              case (
+                    f0: JsSuccess[PieceStatsFragment0],
+                    f1: JsSuccess[PieceStatsFragment1]
+                  ) =>
+                JsSuccess(PieceStatsOfFragments.ofFragments(f0.get, f1.get))
+            }
+          }
+      )
+    )
     val writes: Writes[PieceStats] = new Writes[PieceStats] {
-      def writes(t:PieceStats): JsValue = {
-        val (fragment0,fragment1) = t.toFragments()
-        jsTuple2(pieceStatsFragment0Format.writes(fragment0),pieceStatsFragment1Format.writes(fragment1))
+      def writes(t: PieceStats): JsValue = {
+        val (fragment0, fragment1) = t.toFragments()
+        jsTuple2(
+          pieceStatsFragment0Format.writes(fragment0),
+          pieceStatsFragment1Format.writes(fragment1)
+        )
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val pieceFormat = Json.format[Piece]
+
+  implicit val resetStateFormat = {
+    val reads: Reads[ResetState] =
+      readsFromPair[ResetState](
+        "ResetState",
+        Map(
+          "FirstTurn" -> ((_: JsValue) => JsSuccess(FirstTurn: ResetState)),
+          "Normal" -> ((_: JsValue) => JsSuccess(Normal: ResetState)),
+          "Reset1" -> ((_: JsValue) => JsSuccess(Reset1: ResetState)),
+          "Reset2" -> ((_: JsValue) => JsSuccess(Reset2: ResetState))
+        )
+      )
+    val writes: Writes[ResetState] = new Writes[ResetState] {
+      def writes(t: ResetState): JsValue = t match {
+        case (FirstTurn) => jsPair("FirstTurn", JsString(""))
+        case (Normal)    => jsPair("Normal", JsString(""))
+        case (Reset1)    => jsPair("Reset1", JsString(""))
+        case (Reset2)    => jsPair("Reset2", JsString(""))
+      }
+    }
+    Format(reads, writes)
+  }
 
   implicit val tileFormat = Json.format[Tile]
 
@@ -407,26 +543,39 @@ object Protocol {
   implicit val boardStateFragment1Format = Json.format[BoardStateFragment1]
 
   implicit val boardStateFormat = {
-    val reads: Reads[BoardState] = readsFromTuple2[BoardState]("BoardState",((json0:JsValue,json1:JsValue) => {
-      val fragment0 : JsResult[BoardStateFragment0] = boardStateFragment0Format.reads(json0)
-      val fragment1 : JsResult[BoardStateFragment1] = boardStateFragment1Format.reads(json1)
-        (fragment0,fragment1) match {
-        case (err: JsError,_) => err
-        case (_,err: JsError) => err
-        case (f0: JsSuccess[BoardStateFragment0],f1: JsSuccess[BoardStateFragment1]) =>
-          JsSuccess(BoardStateOfFragments.ofFragments(f0.get,f1.get))
-      }
-    }))
+    val reads: Reads[BoardState] = readsFromTuple2[BoardState](
+      "BoardState",
+      (
+          (json0: JsValue, json1: JsValue) => {
+            val fragment0: JsResult[BoardStateFragment0] =
+              boardStateFragment0Format.reads(json0)
+            val fragment1: JsResult[BoardStateFragment1] =
+              boardStateFragment1Format.reads(json1)
+            (fragment0, fragment1) match {
+              case (err: JsError, _) => err
+              case (_, err: JsError) => err
+              case (
+                    f0: JsSuccess[BoardStateFragment0],
+                    f1: JsSuccess[BoardStateFragment1]
+                  ) =>
+                JsSuccess(BoardStateOfFragments.ofFragments(f0.get, f1.get))
+            }
+          }
+      )
+    )
     val writes: Writes[BoardState] = new Writes[BoardState] {
-      def writes(t:BoardState): JsValue = {
-        val (fragment0,fragment1) = t.toFragments()
-        jsTuple2(boardStateFragment0Format.writes(fragment0),boardStateFragment1Format.writes(fragment1))
+      def writes(t: BoardState): JsValue = {
+        val (fragment0, fragment1) = t.toFragments()
+        jsTuple2(
+          boardStateFragment0Format.writes(fragment0),
+          boardStateFragment1Format.writes(fragment1)
+        )
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
-  //Board.scala--------------------------------------------------------------------------------
+  // Board.scala--------------------------------------------------------------------------------
   implicit val playerActionsFormat = Json.format[PlayerActions]
   implicit val doGeneralBoardActionFormat = Json.format[DoGeneralBoardAction]
   implicit val localPieceUndoFormat = Json.format[LocalPieceUndo]
@@ -435,56 +584,75 @@ object Protocol {
   implicit val gainSpellUndoFormat = Json.format[GainSpellUndo]
   implicit val redoFormat = Json.format[Redo]
   implicit val boardActionFormat = {
-    val reads: Reads[BoardAction] = readsFromPair[BoardAction]("BoardAction",Map(
-      "PlayerActions" -> ((json:JsValue) => playerActionsFormat.reads(json)),
-      "DoGeneralBoardAction" -> ((json:JsValue) => doGeneralBoardActionFormat.reads(json)),
-      "Redo" -> ((json:JsValue) => redoFormat.reads(json)),
-      "LocalPieceUndo" -> ((json:JsValue) => localPieceUndoFormat.reads(json)),
-      "SpellUndo" -> ((json:JsValue) => spellUndoFormat.reads(json)),
-      "BuyReinforcementUndo" -> ((json:JsValue) => buyReinforcementUndoFormat.reads(json)),
-      "GainSpellUndo" -> ((json:JsValue) => gainSpellUndoFormat.reads(json)),
-    ))
+    val reads: Reads[BoardAction] = readsFromPair[BoardAction](
+      "BoardAction",
+      Map(
+        "PlayerActions" -> ((json: JsValue) => playerActionsFormat.reads(json)),
+        "DoGeneralBoardAction" -> ((json: JsValue) =>
+          doGeneralBoardActionFormat.reads(json)
+        ),
+        "Redo" -> ((json: JsValue) => redoFormat.reads(json)),
+        "LocalPieceUndo" -> ((json: JsValue) =>
+          localPieceUndoFormat.reads(json)
+        ),
+        "SpellUndo" -> ((json: JsValue) => spellUndoFormat.reads(json)),
+        "BuyReinforcementUndo" -> ((json: JsValue) =>
+          buyReinforcementUndoFormat.reads(json)
+        ),
+        "GainSpellUndo" -> ((json: JsValue) => gainSpellUndoFormat.reads(json))
+      )
+    )
     val writes: Writes[BoardAction] = new Writes[BoardAction] {
       def writes(t: BoardAction): JsValue = t match {
-        case (t:PlayerActions) => jsPair("PlayerActions",playerActionsFormat.writes(t))
-        case (t:DoGeneralBoardAction) => jsPair("DoGeneralBoardAction",doGeneralBoardActionFormat.writes(t))
-        case (t:Redo) => jsPair("Redo",redoFormat.writes(t))
-        case (t:LocalPieceUndo) => jsPair("LocalPieceUndo",localPieceUndoFormat.writes(t))
-        case (t:SpellUndo) => jsPair("SpellUndo",spellUndoFormat.writes(t))
-        case (t:BuyReinforcementUndo) => jsPair("BuyReinforcementUndo",buyReinforcementUndoFormat.writes(t))
-        case (t:GainSpellUndo) => jsPair("GainSpellUndo",gainSpellUndoFormat.writes(t))
+        case (t: PlayerActions) =>
+          jsPair("PlayerActions", playerActionsFormat.writes(t))
+        case (t: DoGeneralBoardAction) =>
+          jsPair("DoGeneralBoardAction", doGeneralBoardActionFormat.writes(t))
+        case (t: Redo) => jsPair("Redo", redoFormat.writes(t))
+        case (t: LocalPieceUndo) =>
+          jsPair("LocalPieceUndo", localPieceUndoFormat.writes(t))
+        case (t: SpellUndo) => jsPair("SpellUndo", spellUndoFormat.writes(t))
+        case (t: BuyReinforcementUndo) =>
+          jsPair("BuyReinforcementUndo", buyReinforcementUndoFormat.writes(t))
+        case (t: GainSpellUndo) =>
+          jsPair("GainSpellUndo", gainSpellUndoFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
   implicit val boardSummaryFormat = Json.format[BoardSummary]
   implicit val boardHistoryFormat = Json.format[BoardHistory]
   implicit val boardFormat = Json.format[Board]
 
-  //Game.scala--------------------------------------------------------------------------------
+  // Game.scala--------------------------------------------------------------------------------
   implicit val techLevelFormat = {
-    val reads: Reads[TechLevel] = readsFromString[TechLevel]("TechLevel")(TechLevel.ofString)
-    val writes: Writes[TechLevel] = writesToString[TechLevel](techLevel => techLevel.toString)
-    Format(reads,writes)
+    val reads: Reads[TechLevel] =
+      readsFromString[TechLevel]("TechLevel")(TechLevel.ofString)
+    val writes: Writes[TechLevel] =
+      writesToString[TechLevel](techLevel => techLevel.toString)
+    Format(reads, writes)
   }
 
   implicit val pieceTechFormat = Json.format[PieceTech]
   implicit val techFormat = {
-    val reads: Reads[Tech] = readsFromPair[Tech]("Tech",Map(
-      "PieceTech" -> ((json:JsValue) => pieceTechFormat.reads(json)),
-      "Copycat" -> ((_:JsValue) => JsSuccess(Copycat: Tech)),
-      "TechSeller" -> ((_:JsValue) => JsSuccess(TechSeller: Tech)),
-      "Metamagic" -> ((_:JsValue) => JsSuccess(Metamagic: Tech)),
-    ))
+    val reads: Reads[Tech] = readsFromPair[Tech](
+      "Tech",
+      Map(
+        "PieceTech" -> ((json: JsValue) => pieceTechFormat.reads(json)),
+        "Copycat" -> ((_: JsValue) => JsSuccess(Copycat: Tech)),
+        "TechSeller" -> ((_: JsValue) => JsSuccess(TechSeller: Tech)),
+        "Metamagic" -> ((_: JsValue) => JsSuccess(Metamagic: Tech))
+      )
+    )
     val writes: Writes[Tech] = new Writes[Tech] {
       def writes(t: Tech): JsValue = t match {
-        case (t:PieceTech) => jsPair("PieceTech",pieceTechFormat.writes(t))
-        case Copycat => jsPair("Copycat", JsString(""))
-        case TechSeller => jsPair("TechSeller", JsString(""))
-        case Metamagic => jsPair("Metamagic", JsString(""))
+        case (t: PieceTech) => jsPair("PieceTech", pieceTechFormat.writes(t))
+        case Copycat        => jsPair("Copycat", JsString(""))
+        case TechSeller     => jsPair("TechSeller", JsString(""))
+        case Metamagic      => jsPair("Metamagic", JsString(""))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val techStateFormat = Json.format[TechState]
@@ -494,7 +662,8 @@ object Protocol {
   implicit val chooseSpellFormat = Json.format[ChooseSpell]
   implicit val unchooseSpellFormat = Json.format[UnchooseSpell]
   implicit val buyExtraTechAndSpellFormat = Json.format[BuyExtraTechAndSpell]
-  implicit val unbuyExtraTechAndSpellFormat = Json.format[UnbuyExtraTechAndSpell]
+  implicit val unbuyExtraTechAndSpellFormat =
+    Json.format[UnbuyExtraTechAndSpell]
   implicit val sellTechFormat = Json.format[SellTech]
   implicit val unsellTechFormat = Json.format[UnsellTech]
   implicit val addWinFormat = Json.format[AddWin]
@@ -504,49 +673,75 @@ object Protocol {
   implicit val setBoardDoneFormat = Json.format[SetBoardDone]
   implicit val resignBoardFormat = Json.format[ResignBoard]
   implicit val gameActionFormat = {
-    val reads: Reads[GameAction] = readsFromPair[GameAction]("GameAction",Map(
-      "PayForReinforcement" -> ((json:JsValue) => payForReinforcementFormat.reads(json)),
-      "UnpayForReinforcement" -> ((json:JsValue) => unpayForReinforcementFormat.reads(json)),
-      "ChooseSpell" -> ((json:JsValue) => chooseSpellFormat.reads(json)),
-      "UnchooseSpell" -> ((json:JsValue) => unchooseSpellFormat.reads(json)),
-      "BuyExtraTechAndSpell" -> ((json:JsValue) => buyExtraTechAndSpellFormat.reads(json)),
-      "SellTech" -> ((json:JsValue) => sellTechFormat.reads(json)),
-      "UnsellTech" -> ((json:JsValue) => unsellTechFormat.reads(json)),
-      "UnbuyExtraTechAndSpell" -> ((json:JsValue) => unbuyExtraTechAndSpellFormat.reads(json)),
-      "AddWin" -> ((json:JsValue) => addWinFormat.reads(json)),
-      "AddUpcomingSpells" -> ((json:JsValue) => addUpcomingSpellsFormat.reads(json)),
-      "PerformTech" -> ((json:JsValue) => performTechFormat.reads(json)),
-      "UndoTech" -> ((json:JsValue) => undoTechFormat.reads(json)),
-      "SetBoardDone" -> ((json:JsValue) => setBoardDoneFormat.reads(json)),
-      "ResignBoard" -> ((json:JsValue) => resignBoardFormat.reads(json)),
-    ))
+    val reads: Reads[GameAction] = readsFromPair[GameAction](
+      "GameAction",
+      Map(
+        "PayForReinforcement" -> ((json: JsValue) =>
+          payForReinforcementFormat.reads(json)
+        ),
+        "UnpayForReinforcement" -> ((json: JsValue) =>
+          unpayForReinforcementFormat.reads(json)
+        ),
+        "ChooseSpell" -> ((json: JsValue) => chooseSpellFormat.reads(json)),
+        "UnchooseSpell" -> ((json: JsValue) => unchooseSpellFormat.reads(json)),
+        "BuyExtraTechAndSpell" -> ((json: JsValue) =>
+          buyExtraTechAndSpellFormat.reads(json)
+        ),
+        "SellTech" -> ((json: JsValue) => sellTechFormat.reads(json)),
+        "UnsellTech" -> ((json: JsValue) => unsellTechFormat.reads(json)),
+        "UnbuyExtraTechAndSpell" -> ((json: JsValue) =>
+          unbuyExtraTechAndSpellFormat.reads(json)
+        ),
+        "AddWin" -> ((json: JsValue) => addWinFormat.reads(json)),
+        "AddUpcomingSpells" -> ((json: JsValue) =>
+          addUpcomingSpellsFormat.reads(json)
+        ),
+        "PerformTech" -> ((json: JsValue) => performTechFormat.reads(json)),
+        "UndoTech" -> ((json: JsValue) => undoTechFormat.reads(json)),
+        "SetBoardDone" -> ((json: JsValue) => setBoardDoneFormat.reads(json)),
+        "ResignBoard" -> ((json: JsValue) => resignBoardFormat.reads(json))
+      )
+    )
     val writes: Writes[GameAction] = new Writes[GameAction] {
       def writes(t: GameAction): JsValue = t match {
-        case (t:PayForReinforcement) => jsPair("PayForReinforcement",payForReinforcementFormat.writes(t))
-        case (t:UnpayForReinforcement) => jsPair("UnpayForReinforcement",unpayForReinforcementFormat.writes(t))
-        case (t:ChooseSpell) => jsPair("ChooseSpell",chooseSpellFormat.writes(t))
-        case (t:UnchooseSpell) => jsPair("UnchooseSpell",unchooseSpellFormat.writes(t))
-        case (t:BuyExtraTechAndSpell) => jsPair("BuyExtraTechAndSpell",buyExtraTechAndSpellFormat.writes(t))
-        case (t:UnbuyExtraTechAndSpell) => jsPair("UnbuyExtraTechAndSpell",unbuyExtraTechAndSpellFormat.writes(t))
-        case (t:SellTech) => jsPair("SellTech", sellTechFormat.writes(t))
-        case (t:UnsellTech) => jsPair("UnsellTech", unsellTechFormat.writes(t))
-        case (t:AddWin) => jsPair("AddWin",addWinFormat.writes(t))
-        case (t:AddUpcomingSpells) => jsPair("AddUpcomingSpells",addUpcomingSpellsFormat.writes(t))
-        case (t:PerformTech) => jsPair("PerformTech",performTechFormat.writes(t))
-        case (t:UndoTech) => jsPair("UndoTech",undoTechFormat.writes(t))
-        case (t:SetBoardDone) => jsPair("SetBoardDone",setBoardDoneFormat.writes(t))
-        case (t:ResignBoard) => jsPair("ResignBoard",resignBoardFormat.writes(t))
+        case (t: PayForReinforcement) =>
+          jsPair("PayForReinforcement", payForReinforcementFormat.writes(t))
+        case (t: UnpayForReinforcement) =>
+          jsPair("UnpayForReinforcement", unpayForReinforcementFormat.writes(t))
+        case (t: ChooseSpell) =>
+          jsPair("ChooseSpell", chooseSpellFormat.writes(t))
+        case (t: UnchooseSpell) =>
+          jsPair("UnchooseSpell", unchooseSpellFormat.writes(t))
+        case (t: BuyExtraTechAndSpell) =>
+          jsPair("BuyExtraTechAndSpell", buyExtraTechAndSpellFormat.writes(t))
+        case (t: UnbuyExtraTechAndSpell) =>
+          jsPair(
+            "UnbuyExtraTechAndSpell",
+            unbuyExtraTechAndSpellFormat.writes(t)
+          )
+        case (t: SellTech)   => jsPair("SellTech", sellTechFormat.writes(t))
+        case (t: UnsellTech) => jsPair("UnsellTech", unsellTechFormat.writes(t))
+        case (t: AddWin)     => jsPair("AddWin", addWinFormat.writes(t))
+        case (t: AddUpcomingSpells) =>
+          jsPair("AddUpcomingSpells", addUpcomingSpellsFormat.writes(t))
+        case (t: PerformTech) =>
+          jsPair("PerformTech", performTechFormat.writes(t))
+        case (t: UndoTech) => jsPair("UndoTech", undoTechFormat.writes(t))
+        case (t: SetBoardDone) =>
+          jsPair("SetBoardDone", setBoardDoneFormat.writes(t))
+        case (t: ResignBoard) =>
+          jsPair("ResignBoard", resignBoardFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val gameFormat = Json.format[Game]
 
-  //ExternalInfo.scala
+  // ExternalInfo.scala
   implicit val externalInfoFormat = Json.format[ExternalInfo]
 
-  //Protocol.scala--------------------------------------------------------------------------------
+  // Protocol.scala--------------------------------------------------------------------------------
   implicit val versionFormat = Json.format[Version]
   implicit val queryErrorFormat = Json.format[QueryError]
   implicit val clientHeartbeatRateFormat = Json.format[ClientHeartbeatRate]
@@ -567,51 +762,80 @@ object Protocol {
   implicit val reportTimeLeftFormat = Json.format[ReportTimeLeft]
   implicit val reportPauseFormat = Json.format[ReportPause]
   implicit val responseFormat = {
-    val reads: Reads[Response] = readsFromPair[Response]("Response",Map(
-      "Version" -> ((json:JsValue) => versionFormat.reads(json)),
-      "QueryError" -> ((json:JsValue) => queryErrorFormat.reads(json)),
-      "ClientHeartbeatRate" -> ((json:JsValue) => clientHeartbeatRateFormat.reads(json)),
-      "OkHeartbeat" -> ((json:JsValue) => okHeartbeatFormat.reads(json)),
-      "Messages" -> ((json:JsValue) => messagesFormat.reads(json)),
-      "Players" -> ((json:JsValue) => playersFormat.reads(json)),
-      "Initialize" -> ((json:JsValue) => initializeFormat.reads(json)),
-      "UserJoined" -> ((json:JsValue) => userJoinedFormat.reads(json)),
-      "UserLeft" -> ((json:JsValue) => userLeftFormat.reads(json)),
-      "OkBoardAction" -> ((json:JsValue) => okBoardActionFormat.reads(json)),
-      "OkGameAction" -> ((json:JsValue) => okGameActionFormat.reads(json)),
-      "ReportBoardHistory" -> ((json:JsValue) => reportBoardHistoryFormat.reads(json)),
-      "ReportBoardAction" -> ((json:JsValue) => reportBoardActionFormat.reads(json)),
-      "ReportGameAction" -> ((json:JsValue) => reportGameActionFormat.reads(json)),
-      "ReportNewTurn" -> ((json:JsValue) => reportNewTurnFormat.reads(json)),
-      "ReportResetBoard" -> ((json:JsValue) => reportResetBoardFormat.reads(json)),
-      "ReportRevealSpells" -> ((json:JsValue) => reportRevealSpellsFormat.reads(json)),
-      "ReportTimeLeft" -> ((json:JsValue) => reportTimeLeftFormat.reads(json)),
-      "ReportPause" -> ((json:JsValue) => reportPauseFormat.reads(json))
-    ))
+    val reads: Reads[Response] = readsFromPair[Response](
+      "Response",
+      Map(
+        "Version" -> ((json: JsValue) => versionFormat.reads(json)),
+        "QueryError" -> ((json: JsValue) => queryErrorFormat.reads(json)),
+        "ClientHeartbeatRate" -> ((json: JsValue) =>
+          clientHeartbeatRateFormat.reads(json)
+        ),
+        "OkHeartbeat" -> ((json: JsValue) => okHeartbeatFormat.reads(json)),
+        "Messages" -> ((json: JsValue) => messagesFormat.reads(json)),
+        "Players" -> ((json: JsValue) => playersFormat.reads(json)),
+        "Initialize" -> ((json: JsValue) => initializeFormat.reads(json)),
+        "UserJoined" -> ((json: JsValue) => userJoinedFormat.reads(json)),
+        "UserLeft" -> ((json: JsValue) => userLeftFormat.reads(json)),
+        "OkBoardAction" -> ((json: JsValue) => okBoardActionFormat.reads(json)),
+        "OkGameAction" -> ((json: JsValue) => okGameActionFormat.reads(json)),
+        "ReportBoardHistory" -> ((json: JsValue) =>
+          reportBoardHistoryFormat.reads(json)
+        ),
+        "ReportBoardAction" -> ((json: JsValue) =>
+          reportBoardActionFormat.reads(json)
+        ),
+        "ReportGameAction" -> ((json: JsValue) =>
+          reportGameActionFormat.reads(json)
+        ),
+        "ReportNewTurn" -> ((json: JsValue) => reportNewTurnFormat.reads(json)),
+        "ReportResetBoard" -> ((json: JsValue) =>
+          reportResetBoardFormat.reads(json)
+        ),
+        "ReportRevealSpells" -> ((json: JsValue) =>
+          reportRevealSpellsFormat.reads(json)
+        ),
+        "ReportTimeLeft" -> ((json: JsValue) =>
+          reportTimeLeftFormat.reads(json)
+        ),
+        "ReportPause" -> ((json: JsValue) => reportPauseFormat.reads(json))
+      )
+    )
     val writes: Writes[Response] = new Writes[Response] {
       def writes(t: Response): JsValue = t match {
-        case (t:Version) => jsPair("Version",versionFormat.writes(t))
-        case (t:QueryError) => jsPair("QueryError",queryErrorFormat.writes(t))
-        case (t:ClientHeartbeatRate) => jsPair("ClientHeartbeatRate",clientHeartbeatRateFormat.writes(t))
-        case (t:OkHeartbeat) => jsPair("OkHeartbeat",okHeartbeatFormat.writes(t))
-        case (t:Messages) => jsPair("Messages",messagesFormat.writes(t))
-        case (t:Players) => jsPair("Players",playersFormat.writes(t))
-        case (t:Initialize) => jsPair("Initialize",initializeFormat.writes(t))
-        case (t:UserJoined) => jsPair("UserJoined",userJoinedFormat.writes(t))
-        case (t:UserLeft) => jsPair("UserLeft",userLeftFormat.writes(t))
-        case (t:OkBoardAction) => jsPair("OkBoardAction",okBoardActionFormat.writes(t))
-        case (t:OkGameAction) => jsPair("OkGameAction",okGameActionFormat.writes(t))
-        case (t:ReportBoardHistory) => jsPair("ReportBoardHistory",reportBoardHistoryFormat.writes(t))
-        case (t:ReportBoardAction) => jsPair("ReportBoardAction",reportBoardActionFormat.writes(t))
-        case (t:ReportGameAction) => jsPair("ReportGameAction",reportGameActionFormat.writes(t))
-        case (t:ReportNewTurn) => jsPair("ReportNewTurn",reportNewTurnFormat.writes(t))
-        case (t:ReportResetBoard) => jsPair("ReportResetBoard",reportResetBoardFormat.writes(t))
-        case (t:ReportRevealSpells) => jsPair("ReportRevealSpells",reportRevealSpellsFormat.writes(t))
-        case (t:ReportTimeLeft) => jsPair("ReportTimeLeft",reportTimeLeftFormat.writes(t))
-        case (t:ReportPause) => jsPair("ReportPause",reportPauseFormat.writes(t))
+        case (t: Version)    => jsPair("Version", versionFormat.writes(t))
+        case (t: QueryError) => jsPair("QueryError", queryErrorFormat.writes(t))
+        case (t: ClientHeartbeatRate) =>
+          jsPair("ClientHeartbeatRate", clientHeartbeatRateFormat.writes(t))
+        case (t: OkHeartbeat) =>
+          jsPair("OkHeartbeat", okHeartbeatFormat.writes(t))
+        case (t: Messages)   => jsPair("Messages", messagesFormat.writes(t))
+        case (t: Players)    => jsPair("Players", playersFormat.writes(t))
+        case (t: Initialize) => jsPair("Initialize", initializeFormat.writes(t))
+        case (t: UserJoined) => jsPair("UserJoined", userJoinedFormat.writes(t))
+        case (t: UserLeft)   => jsPair("UserLeft", userLeftFormat.writes(t))
+        case (t: OkBoardAction) =>
+          jsPair("OkBoardAction", okBoardActionFormat.writes(t))
+        case (t: OkGameAction) =>
+          jsPair("OkGameAction", okGameActionFormat.writes(t))
+        case (t: ReportBoardHistory) =>
+          jsPair("ReportBoardHistory", reportBoardHistoryFormat.writes(t))
+        case (t: ReportBoardAction) =>
+          jsPair("ReportBoardAction", reportBoardActionFormat.writes(t))
+        case (t: ReportGameAction) =>
+          jsPair("ReportGameAction", reportGameActionFormat.writes(t))
+        case (t: ReportNewTurn) =>
+          jsPair("ReportNewTurn", reportNewTurnFormat.writes(t))
+        case (t: ReportResetBoard) =>
+          jsPair("ReportResetBoard", reportResetBoardFormat.writes(t))
+        case (t: ReportRevealSpells) =>
+          jsPair("ReportRevealSpells", reportRevealSpellsFormat.writes(t))
+        case (t: ReportTimeLeft) =>
+          jsPair("ReportTimeLeft", reportTimeLeftFormat.writes(t))
+        case (t: ReportPause) =>
+          jsPair("ReportPause", reportPauseFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 
   implicit val heartbeatFormat = Json.format[Heartbeat]
@@ -622,26 +846,38 @@ object Protocol {
   implicit val requestPauseFormat = Json.format[RequestPause]
   implicit val reportViewedBoardFormat = Json.format[ReportViewedBoard]
   implicit val queryFormat = {
-    val reads: Reads[Query] = readsFromPair[Query]("Query",Map(
-      "Heartbeat" -> ((json:JsValue) => heartbeatFormat.reads(json)),
-      "RequestBoardHistory" -> ((json:JsValue) => requestBoardHistoryFormat.reads(json)),
-      "DoBoardAction" -> ((json:JsValue) => doBoardActionFormat.reads(json)),
-      "DoGameAction" -> ((json:JsValue) => doGameActionFormat.reads(json)),
-      "Chat" -> ((json:JsValue) => chatFormat.reads(json)),
-      "RequestPause" -> ((json:JsValue) => requestPauseFormat.reads(json)),
-      "ReportViewedBoard" -> ((json:JsValue) => reportViewedBoardFormat.reads(json))
-    ))
+    val reads: Reads[Query] = readsFromPair[Query](
+      "Query",
+      Map(
+        "Heartbeat" -> ((json: JsValue) => heartbeatFormat.reads(json)),
+        "RequestBoardHistory" -> ((json: JsValue) =>
+          requestBoardHistoryFormat.reads(json)
+        ),
+        "DoBoardAction" -> ((json: JsValue) => doBoardActionFormat.reads(json)),
+        "DoGameAction" -> ((json: JsValue) => doGameActionFormat.reads(json)),
+        "Chat" -> ((json: JsValue) => chatFormat.reads(json)),
+        "RequestPause" -> ((json: JsValue) => requestPauseFormat.reads(json)),
+        "ReportViewedBoard" -> ((json: JsValue) =>
+          reportViewedBoardFormat.reads(json)
+        )
+      )
+    )
     val writes: Writes[Query] = new Writes[Query] {
       def writes(t: Query): JsValue = t match {
-        case (t:Heartbeat) => jsPair("Heartbeat",heartbeatFormat.writes(t))
-        case (t:RequestBoardHistory) => jsPair("RequestBoardHistory",requestBoardHistoryFormat.writes(t))
-        case (t:DoBoardAction) => jsPair("DoBoardAction",doBoardActionFormat.writes(t))
-        case (t:DoGameAction) => jsPair("DoGameAction",doGameActionFormat.writes(t))
-        case (t:Chat) => jsPair("Chat", chatFormat.writes(t))
-        case (t:RequestPause) => jsPair("RequestPause", requestPauseFormat.writes(t))
-        case (t:ReportViewedBoard) => jsPair("ReportViewedBoard", reportViewedBoardFormat.writes(t))
+        case (t: Heartbeat) => jsPair("Heartbeat", heartbeatFormat.writes(t))
+        case (t: RequestBoardHistory) =>
+          jsPair("RequestBoardHistory", requestBoardHistoryFormat.writes(t))
+        case (t: DoBoardAction) =>
+          jsPair("DoBoardAction", doBoardActionFormat.writes(t))
+        case (t: DoGameAction) =>
+          jsPair("DoGameAction", doGameActionFormat.writes(t))
+        case (t: Chat) => jsPair("Chat", chatFormat.writes(t))
+        case (t: RequestPause) =>
+          jsPair("RequestPause", requestPauseFormat.writes(t))
+        case (t: ReportViewedBoard) =>
+          jsPair("ReportViewedBoard", reportViewedBoardFormat.writes(t))
       }
     }
-    Format(reads,writes)
+    Format(reads, writes)
   }
 }
