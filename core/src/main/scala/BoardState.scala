@@ -805,7 +805,7 @@ case class BoardState private (
     // We don't do this though if this is a turn end instantly after a reset, since
     // there is no time for the player to have non-automatedly chosen what piece they want.
     // if (!turnEndingImmediately) {
-    if (resetState != JustEnded) {
+    if (resetState == Reset1 || resetState == Reset2) {
       while (numFreeBuysAllowed(side) > 0) {
         var bestPieceName: Option[String] = None
         var bestPieceCost: Int = -1
@@ -827,12 +827,12 @@ case class BoardState private (
         numFreeBuysAllowed(side) -= 1
       }
     }
-    allowedFreeBuyPieces(side) = Set()
-    numFreeBuysAllowed(side) = 0
+    if (resetState != JustEnded) {
+      allowedFreeBuyPieces(side) = Set()
+      numFreeBuysAllowed(side) = 0
 
-    // Can no longer rotate necromancers
-    // if (canMove) {
-    if (resetState == Normal) {
+      // Can no longer rotate necromancers
+      // if (canMove) {
       allowedNecros(side) = List()
       pieceById.values.foreach { piece =>
         if (piece.side == side) {
@@ -841,7 +841,6 @@ case class BoardState private (
         }
       }
     }
-    // }
 
     soulsThisRound(side) += newSouls
     totalSouls(side) += newSouls

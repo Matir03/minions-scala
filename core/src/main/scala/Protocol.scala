@@ -42,6 +42,7 @@ object Protocol {
   case class ReportGameAction(gameAction: GameAction, newGameSequence: Int)
       extends Response
   case class ReportNewTurn(newSide: Side) extends Response
+  case class ReportTurnStart(newSide: Side) extends Response
   case class ReportResetBoard(
       boardIdx: Int,
       necroNames: SideArray[List[PieceName]],
@@ -760,6 +761,7 @@ object Protocol {
   implicit val reportBoardActionFormat = Json.format[ReportBoardAction]
   implicit val reportGameActionFormat = Json.format[ReportGameAction]
   implicit val reportNewTurnFormat = Json.format[ReportNewTurn]
+  implicit val reportTurnStartFormat = Json.format[ReportTurnStart]
   implicit val reportResetBoardFormat = Json.format[ReportResetBoard]
   implicit val reportRevealSpellsFormat = Json.format[ReportRevealSpells]
   implicit val reportTimeLeftFormat = Json.format[ReportTimeLeft]
@@ -791,6 +793,9 @@ object Protocol {
           reportGameActionFormat.reads(json)
         ),
         "ReportNewTurn" -> ((json: JsValue) => reportNewTurnFormat.reads(json)),
+        "ReportTurnStart" -> ((json: JsValue) =>
+          reportTurnStartFormat.reads(json)
+        ),
         "ReportResetBoard" -> ((json: JsValue) =>
           reportResetBoardFormat.reads(json)
         ),
@@ -828,6 +833,8 @@ object Protocol {
           jsPair("ReportGameAction", reportGameActionFormat.writes(t))
         case (t: ReportNewTurn) =>
           jsPair("ReportNewTurn", reportNewTurnFormat.writes(t))
+        case (t: ReportTurnStart) =>
+          jsPair("ReportTurnStart", reportTurnStartFormat.writes(t))
         case (t: ReportResetBoard) =>
           jsPair("ReportResetBoard", reportResetBoardFormat.writes(t))
         case (t: ReportRevealSpells) =>

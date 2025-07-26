@@ -153,9 +153,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   }
 
   override def receive: Receive = {
-    case Protocol.ReportTimeLeft(_) => ()
-
-    case Protocol.ReportNewTurn(S1) if game.game.winner.isEmpty =>
+    case Protocol.ReportTurnStart(S1) if game.game.winner.isEmpty =>
       for (i <- 0 until game.numBoards) {
         movers(i) = Map()
       }

@@ -471,6 +471,8 @@ class Client() {
         turnTimeLeft = None
         currentBeep = 0
 
+      case Protocol.ReportTurnStart(_) => ()
+
       case Protocol.ReportRevealSpells(spellIdsAndNames) =>
         externalInfo.get.revealSpells(spellIdsAndNames)
 

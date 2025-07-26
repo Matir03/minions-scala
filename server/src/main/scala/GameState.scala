@@ -343,7 +343,7 @@ case class GameState(
 
     game.endTurn()
     boards.foreach { board => board.endTurn(externalInfo) }
-    // broadcastAll(Protocol.ReportNewTurn(newSide))
+    broadcastAll(Protocol.ReportNewTurn(newSide))
 
     refillUpcomingSpells()
 
@@ -359,7 +359,7 @@ case class GameState(
         }
       }
     }
-    broadcastAll(Protocol.ReportNewTurn(newSide))
+    broadcastAll(Protocol.ReportTurnStart(newSide))
 
     // Schedule the next end of turn
     game.winner match {
