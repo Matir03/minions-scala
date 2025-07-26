@@ -220,18 +220,18 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
         }
         .mkString("/")
 
-      val rein0 = boardState
+      val rein0 = (boardState
         .reinforcements(S0)
         .map { case (p, n) =>
           (0 until n).map(_ => fenChar(p, S0)).mkString("")
-        }
+        } ++ boardState.allowedFreeBuyPieces(S0).map(fenChar(_, S0)))
         .mkString("")
 
-      val rein1 = boardState
+      val rein1 = (boardState
         .reinforcements(S1)
         .map { case (p, n) =>
           (0 until n).map(_ => fenChar(p, S1)).mkString("")
-        }
+        } ++ boardState.allowedFreeBuyPieces(S1).map(fenChar(_, S1)))
         .mkString("")
 
       val reset = boardState.resetState match {
@@ -342,7 +342,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     actionType match {
       case "b_setup" =>
         val boardIdx = parts(2).toInt
-        val unitChar = parts(4).charAt(0)
+        val unitChar = parts(5).charAt(0)
         val pieceName = pieceNameFromFenChar(unitChar)
 
         val generalBoardAction =
