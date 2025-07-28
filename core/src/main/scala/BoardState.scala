@@ -370,6 +370,7 @@ object BoardState {
       hasUsedSpawnerTile = false,
       side = S0,
       hasWon = false,
+      hasLost = false,
       // canMove = false,
       // turnEndingImmediately = false,
       resetState = FirstTurn,
@@ -423,6 +424,7 @@ case class BoardStateFragment1(
     var hasUsedSpawnerTile: Boolean,
     var side: Side,
     var hasWon: Boolean,
+    var hasLost: Boolean,
     // var canMove: Boolean,
     // var turnEndingImmediately: Boolean,
     var resetState: ResetState,
@@ -457,6 +459,7 @@ object BoardStateOfFragments {
       hasUsedSpawnerTile = f1.hasUsedSpawnerTile,
       side = f1.side,
       hasWon = f1.hasWon,
+      hasLost = f1.hasLost,
       // canMove = f1.canMove,
       // turnEndingImmediately = f1.turnEndingImmediately,
       resetState = f1.resetState,
@@ -513,8 +516,9 @@ case class BoardState private (
 
     // Current side to move
     var side: Side,
-    // Has the current side won the board?
+    // Has the current side won or lost the board?
     var hasWon: Boolean,
+    var hasLost: Boolean,
     // Is the player allowed to move this turn?
     // False for a turn immediately after a graveyard victory
     // var canMove: Boolean,
@@ -560,6 +564,7 @@ case class BoardState private (
         hasUsedSpawnerTile = hasUsedSpawnerTile,
         side = side,
         hasWon = hasWon,
+        hasLost = hasLost,
         // canMove = canMove,
         // turnEndingImmediately = turnEndingImmediately,
         resetState = resetState,
@@ -592,6 +597,7 @@ case class BoardState private (
       hasUsedSpawnerTile = hasUsedSpawnerTile,
       side = side,
       hasWon = hasWon,
+      hasLost = hasLost,
       // canMove = canMove,
       // turnEndingImmediately = turnEndingImmediately,
       resetState = resetState,
@@ -767,7 +773,7 @@ case class BoardState private (
 
     // Check for win conditions - start of turn at least 8 graveyards
     if (countGraveyards(side) >= 8) {
-      hasWon = true
+      hasLost = true
     }
   }
 
@@ -903,8 +909,9 @@ case class BoardState private (
     totalSouls.transform { _ => 0 }
     totalCosts.transform { _ => 0 }
 
-    // Unset win flag
+    // Unset win/loss flags
     hasWon = false
+    hasLost = false
     // canMove = canMoveFirstTurn
     // turnEndingImmediately = turnEndingImmediatelyAfterReset
     resetState = newResetState

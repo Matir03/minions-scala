@@ -278,18 +278,6 @@ case class GameState(
       }
     }
 
-    // Check win condition and reset boards as needed
-    // This happens BEFORE ending the turn so that the winner doesn't get all the souls on the won board.
-    for (boardIdx <- 0 until boards.length) {
-      val board = boards(boardIdx)
-      if (board.curState.hasWon) {
-        doAddWin(oldSide, boardIdx)
-        // if (game.winner.isEmpty) {
-        doResetBoard(boardIdx, justEnded = true)
-        // }
-      }
-    }
-
     // Accumulate souls on all the boards for the side about to move
     val souls = boards.foldLeft(game.extraSoulsPerTurn(newSide)) {
       case (sum, board) =>
@@ -347,18 +335,18 @@ case class GameState(
 
     refillUpcomingSpells()
 
-    // Win at start of turn due to graveyards
+    // Check win condition and reset boards as needed
     for (boardIdx <- 0 until boards.length) {
       val board = boards(boardIdx)
       if (board.curState.hasWon) {
-        if (game.winner.isEmpty) {
-          doAddWin(newSide, boardIdx)
-          // if (game.winner.isEmpty) {
-          doResetBoard(boardIdx, justEnded = false)
-          // }
-        }
+        doAddWin(oldSide, boardIdx)
+        doResetBoard(boardIdx, justEnded = false)
+      } else if (board.curState.hasLost) {
+        doAddWin(newSide, boardIdx)
+        doResetBoard(boardIdx, justEnded = false)
       }
     }
+
     broadcastAll(Protocol.ReportTurnStart(newSide))
 
     // Schedule the next end of turn
@@ -576,7 +564,8 @@ case class GameState(
                   // Check ahead of time if it's legal
                   game.tryIsLegal(gameAction).map { case () =>
                     // And if so, reset the board
-                    doResetBoard(boardIdx, justEnded = true)
+                    // doResetBoard(boardIdx, justEnded = true)
+                    boards(boardIdx).curState.hasLost = true
                     allMessages =
                       allMessages :+ ("GAME: Team " + game.curSide.toColorName + " resigned board " + (boardIdx + 1) + "!")
                     broadcastMessages()
