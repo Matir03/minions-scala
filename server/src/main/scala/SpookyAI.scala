@@ -176,13 +176,13 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     def encodeTechState(techStates: Array[TechState]): String = {
       // For each tech, compute state
       val team0Spells = techStates
-        .slice(1, techStates.length)
+        .slice(2, techStates.length)
         .map { techState =>
           techState.level.apply(S0).toString.charAt(0)
         }
         .mkString("")
       val team1Spells = techStates
-        .slice(1, techStates.length)
+        .slice(2, techStates.length)
         .map { techState =>
           techState.level.apply(S1).toString.charAt(0)
         }
@@ -312,7 +312,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val maps = gameState.boardNames.map(mapNameToFen).mkString(",")
     val techs =
       gameState.game.techLine
-        .slice(1, gameState.game.techLine.length)
+        .slice(2, gameState.game.techLine.length)
         .map(t =>
           t.tech match {
             case PieceTech(pieceName) => fenChar(pieceName, S0)
@@ -437,7 +437,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
           .map(i => Protocol.DoGameAction(PerformTech(side, idx + i)))
           .toList
         val acquireTech = acquire
-          .map(i => Protocol.DoGameAction(PerformTech(side, i + 1)))
+          .map(i => Protocol.DoGameAction(PerformTech(side, i + 2)))
           .toList
         buySpells ++ advanceTech ++ acquireTech
     }

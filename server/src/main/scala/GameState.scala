@@ -862,7 +862,7 @@ object GameState {
         val necroNames = SideArray.create(List(Units.necromancer.name))
         state.resetBoard(
           necroNames,
-          SideArray.create(Map()),
+          SideArray.create(Map("initiate" -> 1)),
           externalInfo,
           FirstTurn
         )

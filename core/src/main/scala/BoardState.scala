@@ -832,6 +832,7 @@ case class BoardState private (
         }
         numFreeBuysAllowed(side) -= 1
       }
+      addReinforcementInternal(side, "initiate")
     }
     if (resetState != JustEnded) {
       allowedFreeBuyPieces(side) = Set()
