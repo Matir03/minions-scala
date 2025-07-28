@@ -336,33 +336,36 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
         .toList
     }
 
+    if (parts(0) != "action") {
+      return List()
+    }
+
     val actionType = parts(1)
     val actionId = makeActionId()
 
     actionType match {
-      case "b_setup" =>
-        val boardIdx = parts(2).toInt
-        val unitChar = parts(5).charAt(0)
-        val pieceName = pieceNameFromFenChar(unitChar)
-
-        val generalBoardAction =
-          DoGeneralBoardAction(
-            BuyReinforcement(pieceName, free = true),
-            actionId
-          )
-
-        List(
-          Protocol.DoBoardAction(
-            boardIdx,
-            generalBoardAction
-          )
-        )
-
-      case "b_attack" =>
+      case "board" =>
         val boardIdx = parts(2).toInt
         val boardActionType = parts(3)
 
         boardActionType match {
+          case "setup" =>
+            val unitChar = parts(5).charAt(0)
+            val pieceName = pieceNameFromFenChar(unitChar)
+
+            val generalBoardAction =
+              DoGeneralBoardAction(
+                BuyReinforcement(pieceName, free = true),
+                actionId
+              )
+
+            List(
+              Protocol.DoBoardAction(
+                boardIdx,
+                generalBoardAction
+              )
+            )
+
           case "move" =>
             val (fromLoc, toLoc) = parseLocPair(parts(4))
             val movement = makeMovement(boardIdx, fromLoc, toLoc)
@@ -399,13 +402,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
             val playerActions =
               PlayerActions(List(Blink(pieceSpec, blinkLoc)), actionId)
             List(Protocol.DoBoardAction(boardIdx, playerActions))
-        }
 
-      case "b_spawn" =>
-        val boardIdx = parts(2).toInt
-        val boardActionType = parts(3)
-
-        boardActionType match {
           case "buy" =>
             val unitChar = parts(4).charAt(0)
             val pieceName = pieceNameFromFenChar(unitChar)
