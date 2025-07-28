@@ -1413,9 +1413,7 @@ case class BoardState private (
               failed("Death attacks cannot hurt necromancers")
             else Success(())
           case Some(Unsummon) =>
-            if (targetStats.isPersistent)
-              failed("Target is persistent - cannot be unsummoned")
-            else Success(())
+            Success(())
           case Some(Enchant(_)) => Success(())
           case Some(TransformInto(_)) =>
             if (targetStats.isNecromancer)
@@ -2290,7 +2288,12 @@ case class BoardState private (
         piece.damage += n
         killIfEnoughDamage(piece, externalInfo)
       case Unsummon =>
-        unsummonPiece(piece)
+        if (!piece.curStats(this).isPersistent) {
+          unsummonPiece(piece)
+        } else {
+          piece.damage += 1
+          killIfEnoughDamage(piece, externalInfo)
+        }
       case Kill =>
         killPiece(piece, externalInfo)
       case Enchant(modWithDuration) =>
