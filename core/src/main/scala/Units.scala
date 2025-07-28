@@ -338,13 +338,13 @@ object Units {
 
   val initiate = createPieceStats(
     name = "initiate",
-    cost = 2,
-    rebate = 0,
+    cost = 3,
+    rebate = 1,
     moveRange = 2,
     isLumbering = true,
     attackRange = 1,
     attackEffect = Some(Damage(2)),
-    defense = Some(3),
+    defense = Some(2),
     spawnRange = Some(1),
     abilities = List(MoveFlood)
   )
@@ -355,6 +355,7 @@ object Units {
     rebate = 2,
     moveRange = 1,
     isFlying = true,
+    isPersistent = true,
     attackRange = 1,
     attackEffect = Some(Damage(5)),
     defense = Some(2)
@@ -362,10 +363,9 @@ object Units {
 
   val serpent = createPieceStats(
     name = "serpent",
-    cost = 5,
-    rebate = 3,
+    cost = 4,
+    rebate = 2,
     moveRange = 2,
-    isFlying = true,
     attackRange = 1,
     attackEffect = Some(Damage(3)),
     defense = Some(1)
@@ -373,8 +373,8 @@ object Units {
 
   val warg = createPieceStats(
     name = "warg",
-    cost = 3,
-    rebate = 1,
+    cost = 4,
+    rebate = 2,
     moveRange = 3,
     attackRange = 1,
     attackEffect = Some(Damage(1)),
@@ -386,6 +386,7 @@ object Units {
     cost = 3,
     rebate = 1,
     moveRange = 1,
+    isFlying = true,
     isPersistent = true,
     attackRange = 1,
     attackEffect = Some(Damage(1)),
@@ -396,19 +397,19 @@ object Units {
     name = "wight",
     cost = 4,
     rebate = 1,
-    moveRange = 0,
+    moveRange = 2,
+    isLumbering = true,
     attackRange = 2,
     attackEffect = Some(Damage(1)),
     numAttacks = 5,
-    defense = Some(3),
-    canBlink = true
+    defense = Some(3)
   )
 
   val haunt = createPieceStats(
     name = "haunt",
     cost = 5,
     rebate = 1,
-    moveRange = 0,
+    moveRange = 2,
     attackRange = 3,
     attackEffect = Some(Damage(2)),
     isPersistent = true,
@@ -419,8 +420,8 @@ object Units {
 
   val shrieker = createPieceStats(
     name = "shrieker",
-    cost = 6,
-    rebate = 4,
+    cost = 4,
+    rebate = 1,
     moveRange = 3,
     attackRange = 1,
     attackEffect = Some(Damage(3)),
@@ -444,29 +445,29 @@ object Units {
     rebate = 1,
     moveRange = 1,
     attackRange = 1,
-    attackEffect = Some(Kill),
+    attackEffect = Some(Damage(5)),
     defense = Some(1),
-    spawnRange = Some(1),
-    canHurtNecromancer = false
+    spawnRange = Some(1)
   )
 
   val sorcerer = createPieceStats(
     name = "sorcerer",
-    cost = 4,
-    rebate = 0,
+    cost = 6,
+    rebate = 3,
     moveRange = 2,
     attackRange = 1,
     attackEffect = Some(Unsummon),
     defense = Some(3),
-    numAttacks = 6,
+    numAttacks = 2,
     canBlink = true,
-    isFlying = true
+    isFlying = true,
+    isPersistent = true
   )
 
   val witch = createPieceStats(
     name = "witch",
-    cost = 3,
-    rebate = 0,
+    cost = 4,
+    rebate = 1,
     moveRange = 1,
     attackRange = 3,
     attackEffect = Some(Damage(1)),
@@ -479,28 +480,28 @@ object Units {
     rebate = 2,
     moveRange = 1,
     attackRange = 1,
-    attackEffect = Some(Damage(2)),
-    defense = Some(6),
+    attackEffect = Some(Damage(3)),
+    defense = Some(5),
     isPersistent = true,
     isFlying = true
   )
 
   val mummy = createPieceStats(
     name = "mummy",
-    cost = 6,
-    rebate = 4,
+    cost = 5,
+    rebate = 2,
     moveRange = 1,
     attackRange = 1,
-    numAttacks = 6,
-    attackEffect = Some(Damage(1)),
-    defense = Some(6),
+    numAttacks = 1,
+    attackEffect = Some(Damage(5)),
+    defense = Some(7),
     spawnRange = Some(1)
   )
 
   val lich = createPieceStats(
     name = "lich",
-    cost = 6,
-    rebate = 4,
+    cost = 4,
+    rebate = 1,
     moveRange = 1,
     attackRange = 2,
     attackEffect = Some(Kill),
@@ -510,10 +511,10 @@ object Units {
 
   val void = createPieceStats(
     name = "void",
-    cost = 5,
-    rebate = 3,
-    moveRange = 2,
-    attackRange = 2,
+    cost = 4,
+    rebate = 0,
+    moveRange = 3,
+    attackRange = 1,
     attackEffect = Some(Unsummon),
     defense = Some(2),
     canBlink = true,
@@ -524,8 +525,8 @@ object Units {
     name = "cerberus",
     shortDisplayName = "Cerberus",
     displayName = "Cerberus",
-    cost = 6,
-    rebate = 4,
+    cost = 5,
+    rebate = 3,
     moveRange = 3,
     attackRange = 1,
     attackEffect = Some(Damage(1)),
@@ -537,14 +538,14 @@ object Units {
 
   val wraith = createPieceStats(
     name = "wraith",
-    cost = 6,
-    rebate = 3,
+    cost = 5,
+    rebate = 2,
     moveRange = 2,
     isFlying = true,
     isLumbering = true,
     attackRange = 2,
-    attackEffect = Some(Damage(1)),
-    numAttacks = 3,
+    attackEffect = Some(Damage(3)),
+    numAttacks = 1,
     defense = Some(8),
     isPersistent = true,
     spawnRange = Some(1)
@@ -557,19 +558,20 @@ object Units {
     moveRange = 1,
     attackRange = 1,
     attackEffect = Some(Damage(1)),
-    numAttacks = 10,
+    numAttacks = 20,
     defense = Some(6)
   )
 
   val banshee = createPieceStats(
     name = "banshee",
     cost = 5,
-    rebate = 2,
+    rebate = 3,
     moveRange = 2,
     attackRange = 1,
     attackEffect = Some(Kill),
     defense = Some(2),
     isPersistent = true,
+    isFlying = true,
     canBlink = true,
     canHurtNecromancer = false
   )
@@ -578,11 +580,12 @@ object Units {
     name = "elemental",
     shortDisplayName = "Element",
     cost = 8,
-    rebate = 5,
+    rebate = 4,
     moveRange = 1,
     attackRange = 3,
-    attackEffect = Some(Damage(3)),
+    attackEffect = Some(Damage(1)),
     defense = Some(2),
+    numAttacks = 3,
     abilities = List(MoveTerrain)
   )
 
@@ -596,19 +599,18 @@ object Units {
     isFlying = true,
     attackRange = 2,
     attackEffect = Some(Damage(2)),
-    defense = Some(4),
-    spawnRange = Some(1)
+    defense = Some(5)
   )
 
   val shadowlord = createPieceStats(
     name = "shadowlord",
     shortDisplayName = "SLord",
-    cost = 8,
-    rebate = 3,
+    cost = 9,
+    rebate = 5,
     moveRange = 2,
     isFlying = true,
     attackRange = 1,
-    attackEffect = Some(Damage(8)),
+    attackEffect = Some(Damage(7)),
     defense = Some(10),
     isPersistent = true
   )
