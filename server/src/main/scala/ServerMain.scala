@@ -10,6 +10,7 @@ import java.security.SecureRandom
 import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
+import java.io.File
 
 import akka.actor.{
   ActorSystem,
@@ -485,13 +486,15 @@ object ServerMain extends App {
     <a href="/newGame" class="button">New Game</a>
     <a href="/ai?difficulty=10&ai=spooky" class="button">Vs AI (1v1)</a>
     <a href="/ai?difficulty=0&tutorial=true" class="button">Tutorial</a>
+    <a href="/matches" class="button">Review a Match</a>
   </div>
       """
 
       if (!games.isEmpty) {
         html ++= "<table border=1><tr><th>Game</th><th>Access</th><th>Boards</th><th>Blue Team</th><th>Red Team</th><th>Spectators</th></tr>"
         for ((game, (_, state)) <- games) {
-          val hasPassword = if (state.password.isEmpty) "Public" else "Password"
+          val hasPassword =
+            if (state.password.isEmpty) "Public" else "Password"
           val nBoards = state.numBoards
           def teamString(side: Option[Side]): String = {
             var players = List[String]()
@@ -561,7 +564,8 @@ if(!username || username.length == 0) {
                         )
                       case Some(_) =>
                         games.get(gameid) match {
-                          case None => complete(s"Game $gameid does not exist")
+                          case None =>
+                            complete(s"Game $gameid does not exist")
                           case Some((_, state)) =>
                             (password, state.password) match {
                               case (None, Some(_)) =>
@@ -862,6 +866,12 @@ if(!username || username.length == 0) {
         </head>
         <body>
           <div class="container">
+            <h1 class="title">Minions</h1>
+            <div class="button-container">
+              <a href="/game" class="button">Play a Game</a>
+              <a href="/ai" class="button">Watch AIs Play</a>
+              <a href="/review" class="button">Review a Match</a>
+            </div>
             <h1 class="title">Create a Game</h1>
             <form method=post>
               <div class="field">
@@ -1171,9 +1181,11 @@ if(!username || username.length == 0) {
 
           }
         }
-      } ~ post {
-        formFields(('gameid, 'blueSeconds.as[Double], 'redSeconds.as[Double])) {
-          (gameid, blueSeconds, redSeconds) =>
+      } ~
+        post {
+          formFields(
+            ('gameid, 'blueSeconds.as[Double], 'redSeconds.as[Double])
+          ) { (gameid, blueSeconds, redSeconds) =>
             val (actor, game) = games(gameid)
             game.secondsPerTurn = SideArray.createTwo(blueSeconds, redSeconds)
             actor ! ResetTime()
@@ -1195,6 +1207,104 @@ if(!username || username.length == 0) {
           """
               )
             )
+          }
+        }
+    } ~
+    path("matches") {
+      val matches = Try {
+        val matchesDir = new File("spooky/matches")
+        if (!matchesDir.exists() || !matchesDir.isDirectory()) {
+          println("Warning: 'spooky/matches' directory not found.")
+          Json.arr()
+        } else {
+          val dirs = matchesDir.listFiles()
+          if (dirs == null) {
+            println("Warning: Could not list files in 'spooky/matches'.")
+            Json.arr()
+          } else {
+            val matches = dirs.filter(_.isDirectory).toList.map { dir =>
+              val files = Option(dir.listFiles())
+                .map(_.filter(_.isFile).map(_.getName).toList)
+                .getOrElse(Nil)
+              Json.obj(
+                "dir" -> dir.getName,
+                "files" -> files
+              )
+            }
+            Json.toJson(matches)
+          }
+        }
+      } match {
+        case Success(value) => value
+        case Failure(exception) =>
+          println(s"ERROR: Exception in getMatches: ${exception.getMessage}")
+          exception.printStackTrace()
+          Json.arr()
+      }
+      get {
+        complete(
+          HttpEntity(
+            ContentTypes.`application/json`,
+            matches.toString()
+          )
+        )
+      }
+    } ~
+    pathPrefix("review") {
+      path(Segment / Segment) { (dir, file) =>
+        parameter('ply.as[Int] ? 0) { ply =>
+          // This will eventually load the game and send an Initialize message
+          val gameFile = Paths.get("spooky", "matches", dir, file)
+          if (!Files.exists(gameFile)) {
+            complete(StatusCodes.NotFound)
+          } else {
+
+            val secondsPerTurn = SideArray.create(120.0)
+            val startingSouls = SideArray.createTwo(0, 6)
+            val extraSoulsPerTurn = SideArray.create(0)
+            val targetWins = 2
+            val techSouls = 4
+            val maps_opt = Some(List("Blackened Shores", "Midnight Lake"))
+            val seed_opt = None
+
+            val gameid = chooseGameName("review")
+            val gameState = GameState.createNormal(
+              secondsPerTurn,
+              startingSouls,
+              extraSoulsPerTurn,
+              targetWins,
+              techSouls,
+              maps_opt,
+              seed_opt,
+              None,
+              false
+            )
+            val gameActor = actorSystem.actorOf(
+              Props(classOf[GameActor], gameState, gameid)
+            )
+            games = games + (gameid -> ((gameActor, gameState)))
+            gameActor ! StartGame()
+
+            val lines = Files.readAllLines(gameFile).asScala
+            val turns = TurnParser.splitTurns(lines.toList)
+            val turnsToPlay = turns.slice(0, ply)
+
+            var nextActionIdSuffix = 0
+            def makeActionId(): String = {
+              nextActionIdSuffix = nextActionIdSuffix + 1
+              gameid + nextActionIdSuffix.toString
+            }
+
+            turnsToPlay.foreach { turn =>
+              new TurnParser(gameState, () => makeActionId())
+                .convertUMITurnToActions(turn)
+                .foreach { action =>
+                  gameActor ! action
+                }
+            }
+
+            redirect(s"/show?game=$gameid", StatusCodes.SeeOther)
+          }
         }
       }
     }
@@ -1221,76 +1331,6 @@ if(!username || username.length == 0) {
       addSpookyAI(oldGameState, oldGameid, enginePath)
     }
   }
-
-  // Create test game
-  // val secondsPerTurn = SideArray.create(120.0)
-  // val startingSouls = SideArray.createTwo(0, 6)
-  // val extraSoulsPerTurn = SideArray.createTwo(0, 10)
-  // val targetWins = 2
-  // val techSouls = 4
-  // val maps_opt = Some(List("MegaPuddles"))
-  // val seed_opt = None
-
-  // val gameid = chooseGameName("ai_test")
-  // val gameState = GameState.createNormal(
-  //   secondsPerTurn,
-  //   startingSouls,
-  //   extraSoulsPerTurn,
-  //   targetWins,
-  //   techSouls,
-  //   maps_opt,
-  //   seed_opt,
-  //   None,
-  //   true
-  // )
-  // val gameActor =
-  //   actorSystem.actorOf(Props(classOf[GameActor], gameState, gameid))
-  // games = games + (gameid -> ((gameActor, gameState)))
-  // gameActor ! StartGame()
-
-  // val (actorRef, pub) = Source
-  //   .actorRef[Protocol.Query](128, OverflowStrategy.fail)
-  //   .toMat(Sink.asPublisher(false))(Keep.both)
-  //   .run()
-  // val source = Source.fromPublisher(pub)
-  // val ai =
-  //   actorSystem.actorOf(Props(classOf[AIActor], actorRef, gameState, false))
-
-  // val sink: Sink[Message, _] = {
-  //   Flow[Message]
-  //     .collect { message: Message =>
-  //       message match {
-  //         case TextMessage.Strict(text) =>
-  //           Future.successful(text)
-  //         case TextMessage.Streamed(textStream) =>
-  //           textStream.runFold("")(_ + _)
-  //       }
-  //     }
-  //     .mapAsync(1)((str: Future[String]) => str)
-  //     .map { (str: String) =>
-  //       val json = Json.parse(str)
-  //       json.validate[Protocol.Response] match {
-  //         case (s: JsSuccess[Protocol.Response]) => s.get
-  //         case (e: JsError) =>
-  //           Protocol.QueryError(
-  //             "Could not parse as query: " + JsError.toJson(e).toString()
-  //           )
-  //       }
-  //     }
-  //     .to(
-  //       Sink.actorRef[Protocol.Response](
-  //         ai,
-  //         onCompleteMessage = Protocol.UserLeft("igor", Some(S1))
-  //       )
-  //     )
-  // }
-
-  // val flow = websocketMessageFlow(gameid, "igor", Some("1"))
-  // source
-  //   .map { query => TextMessage(Json.stringify(Json.toJson(query))) }
-  //   .via(flow)
-  //   .to(sink)
-  //   .run()
 
   binding.onComplete {
     case Failure(e) =>
