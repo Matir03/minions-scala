@@ -7,13 +7,7 @@ class TurnParser(game: GameState, makeActionId: () => String) {
   private val movers: Array[scala.collection.mutable.Map[Loc, Piece]] =
     Array.fill(game.numBoards)(scala.collection.mutable.Map())
 
-  def convertUMITurnToActions(
-      umiTurn: List[String]
-  ): List[Protocol.Query] = {
-    umiTurn.flatMap(convertUMIMoveToActions)
-  }
-
-  private def convertUMIMoveToActions(
+  def convertUMIMoveToActions(
       umiMove: String
   ): List[Protocol.Query] = {
     val parts = umiMove.split(" ")
@@ -202,12 +196,21 @@ class TurnParser(game: GameState, makeActionId: () => String) {
 
 object TurnParser {
   def splitTurns(lines: List[String]): List[List[String]] = {
-    val splits = lines.mkString("\n").split("turn").toList
-    splits
-      .slice(1, splits.length)
-      .map(turnWithMetadata => {
-        val lines = turnWithMetadata.split("\n").toList
-        lines.slice(1, lines.length)
-      })
+    var turns = List[List[String]]()
+    var turn = List[String]()
+    lines.foreach { line =>
+      if (line.startsWith("turn")) {
+        if (turn.nonEmpty) {
+          turns = turns :+ turn
+          turn = List()
+        }
+      } else if (line.nonEmpty) {
+        turn = turn :+ line
+      }
+    }
+    if (turn.nonEmpty) {
+      turns = turns :+ turn
+    }
+    turns
   }
 }

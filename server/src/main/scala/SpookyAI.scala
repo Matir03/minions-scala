@@ -151,11 +151,11 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   override def receive: Receive = {
     case Protocol.ReportTurnStart(S1) if game.game.winner.isEmpty =>
       val turn = getBestTurn()
-      val actions =
-        new TurnParser(game, () => makeActionId()).convertUMITurnToActions(turn)
-
-      actions.foreach { action =>
-        out ! action
+      val turnParser = new TurnParser(game, () => makeActionId())
+      turn.foreach { move =>
+        turnParser.convertUMIMoveToActions(move).foreach { action =>
+          out ! action
+        }
       }
 
     case _ => ()
@@ -319,7 +319,6 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
 }
 
 object SpookyAI {
-
   def props(out: ActorRef, game: GameState, enginePath: String): Props =
     Props(new SpookyAI(out, game, enginePath))
 }

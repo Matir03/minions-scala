@@ -1212,7 +1212,7 @@ if(!username || username.length == 0) {
     } ~
     path("matches") {
       val matches = Try {
-        val matchesDir = new File("spooky/matches")
+        val matchesDir = new File("../spooky/matches")
         if (!matchesDir.exists() || !matchesDir.isDirectory()) {
           println("Warning: 'spooky/matches' directory not found.")
           Json.arr()
@@ -1254,7 +1254,7 @@ if(!username || username.length == 0) {
       path(Segment / Segment) { (dir, file) =>
         parameter('ply.as[Int] ? 0) { ply =>
           // This will eventually load the game and send an Initialize message
-          val gameFile = Paths.get("spooky", "matches", dir, file)
+          val gameFile = Paths.get("../spooky/matches", dir, file)
           if (!Files.exists(gameFile)) {
             complete(StatusCodes.NotFound)
           } else {
@@ -1296,14 +1296,20 @@ if(!username || username.length == 0) {
             }
 
             turnsToPlay.foreach { turn =>
-              new TurnParser(gameState, () => makeActionId())
-                .convertUMITurnToActions(turn)
-                .foreach { action =>
+              println("turn: " + turn)
+              val turnParser = new TurnParser(gameState, () => makeActionId())
+              turn.foreach { move =>
+                turnParser.convertUMIMoveToActions(move).foreach { action =>
                   gameActor ! action
                 }
+              }
+              println("finished turn")
             }
 
-            redirect(s"/show?game=$gameid", StatusCodes.SeeOther)
+            redirect(
+              s"/play?game=$gameid&username=review",
+              StatusCodes.SeeOther
+            )
           }
         }
       }
