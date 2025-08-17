@@ -1211,43 +1211,106 @@ if(!username || username.length == 0) {
         }
     } ~
     path("matches") {
-      val matches = Try {
+      get {
         val matchesDir = new File("../spooky/matches")
+
+        val html = new StringBuilder
+        html ++= s"""
+<link rel="icon" href="/img/favicon.png?v=4" />
+<style>
+  body {
+    font-family: "Inter var", sans-serif;
+    margin: 0;
+  }
+
+  table {
+    font-family: "Trebuchet MS", Arial, Helvetica, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  td,
+  th {
+    border: 1px solid #ddd;
+    padding: 8px;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f2f2f2;
+  }
+
+  tr:hover {
+    background-color: #ddd;
+  }
+
+  th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    text-align: left;
+    background-color: #4caf50;
+    color: white;
+  }
+
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+  .title {
+    text-align: center;
+    font-weight: 800;
+    margin-bottom: 0;
+    padding-top: 3rem;
+  }
+  .links {
+    text-align: center;
+    margin: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 1.5rem;
+  }
+</style>
+<link
+  rel="preload"
+  href="https://rsms.me/inter/inter.css"
+  as="style"
+  onload="this.onload=null;this.rel='stylesheet'"
+/>
+
+<div class="container">
+  <h1 class="title">Match Reviews</h1>
+  <p class="links"><a href="/">Home</a></p>
+"""
+
         if (!matchesDir.exists() || !matchesDir.isDirectory()) {
-          println("Warning: 'spooky/matches' directory not found.")
-          Json.arr()
+          html ++= "<p>No matches found. Expected directory: spooky/matches</p>"
         } else {
-          val dirs = matchesDir.listFiles()
-          if (dirs == null) {
-            println("Warning: Could not list files in 'spooky/matches'.")
-            Json.arr()
+          val dirsArr = matchesDir.listFiles()
+          if (dirsArr == null) {
+            html ++= "<p>Could not list files in spooky/matches.</p>"
           } else {
-            val matches = dirs.filter(_.isDirectory).toList.map { dir =>
+            val dirs = dirsArr.filter(_.isDirectory).toList.sortBy(_.getName)
+            html ++= "<table><tr><th>Directory</th><th>File</th><th>Review</th></tr>"
+            dirs.foreach { dir =>
               val files = Option(dir.listFiles())
-                .map(_.filter(_.isFile).map(_.getName).toList)
+                .map(_.filter(_.isFile).toList.sortBy(_.getName))
                 .getOrElse(Nil)
-              Json.obj(
-                "dir" -> dir.getName,
-                "files" -> files
-              )
+              files.foreach { file =>
+                val dirName = dir.getName
+                val fileName = file.getName
+                val reviewUrl = s"/review/$dirName/$fileName?ply=0"
+                html ++= s"""<tr>
+  <td>""" + dirName + """</td>
+  <td>""" + fileName + """</td>
+  <td><a href='""" + reviewUrl + """'>Open Review</a></td>
+</tr>"""
+              }
             }
-            Json.toJson(matches)
+            html ++= "</table>"
           }
         }
-      } match {
-        case Success(value) => value
-        case Failure(exception) =>
-          println(s"ERROR: Exception in getMatches: ${exception.getMessage}")
-          exception.printStackTrace()
-          Json.arr()
-      }
-      get {
-        complete(
-          HttpEntity(
-            ContentTypes.`application/json`,
-            matches.toString()
-          )
-        )
+        html ++= "</div>"
+
+        complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, html.toString))
       }
     } ~
     pathPrefix("review") {
@@ -1300,6 +1363,7 @@ if(!username || username.length == 0) {
               val turnParser = new TurnParser(gameState, () => makeActionId())
               turn.foreach { move =>
                 turnParser.convertUMIMoveToActions(move).foreach { action =>
+                  println("action: " + action)
                   gameActor ! action
                 }
               }

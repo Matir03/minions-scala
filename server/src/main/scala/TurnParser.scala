@@ -136,7 +136,7 @@ class TurnParser(game: GameState, makeActionId: () => String) {
       toLoc: Loc
   ): Movement = {
     val board = game.boards(boardIdx).curState
-    val piece = board.pieces(fromLoc).head
+    val piece = board.pieces(fromLoc).head // fails for invalid moves
     val path = board.findPathForUI(
       piece,
       pathBias = List(),
