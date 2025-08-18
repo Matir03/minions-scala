@@ -213,6 +213,13 @@ class Client() {
   private def redirectToReview(dir: String, file: String, m: Int): Unit = {
     window.location.href = s"/review/$dir/$file?ply=$m"
   }
+  private def adjustReviewPly(delta: Int): Unit = {
+    reviewInfoOpt.foreach { case (dir, file, _) =>
+      val cur = Try(reviewPlyInput.value.toInt).getOrElse(0)
+      val next = Math.max(0, cur + delta)
+      redirectToReview(dir, file, next)
+    }
+  }
   private def setupReviewControls(): Unit = {
     reviewInfoOpt match {
       case Some((dir, file, ply)) =>
@@ -223,8 +230,14 @@ class Client() {
           redirectToReview(dir, file, m)
         }
         reviewPlyInput.onkeydown = { (e: KeyboardEvent) =>
-          if (e.keyCode == 13) {
-            e.preventDefault()
+          if (e.keyCode == 37) { // Left arrow
+            e.preventDefault(); e.stopPropagation()
+            adjustReviewPly(-1)
+          } else if (e.keyCode == 39) { // Right arrow
+            e.preventDefault(); e.stopPropagation()
+            adjustReviewPly(1)
+          } else if (e.keyCode == 13) { // Enter
+            e.preventDefault(); e.stopPropagation()
             val m = Try(reviewPlyInput.value.toInt).getOrElse(0)
             redirectToReview(dir, file, m)
           }
@@ -711,6 +724,17 @@ class Client() {
 
   def keydown(e: KeyboardEvent): Unit = {
     // val _ = jQuery("#chat-input").focus()
+
+    // Review navigation with left/right arrows (skip when typing in chat)
+    if (reviewInfoOpt.nonEmpty && (e.keyCode == 37 || e.keyCode == 39)) {
+      val ae = org.scalajs.dom.document.activeElement
+      val aeId = if (ae != null) ae.asInstanceOf[org.scalajs.dom.Element].id else ""
+      if (aeId != "chat-input") {
+        e.preventDefault()
+        if (e.keyCode == 37) adjustReviewPly(-1)
+        else adjustReviewPly(1)
+      }
+    }
 
     // Enter
     if (e.keyCode == 13) {
