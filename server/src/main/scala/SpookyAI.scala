@@ -262,7 +262,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
       case "haunt"               => 'H'
       case "shrieker"            => 'K'
       case "spectre"             => 'X'
-      case "bone rat"            => 'A'
+      case "rat"                 => 'A'
       case "sorcerer"            => 'U'
       case "witch"               => 'J'
       case "vampire"             => 'V'

@@ -1351,58 +1351,12 @@ if(!username || username.length == 0) {
             games = games + (gameid -> ((gameActor, gameState)))
             gameActor ! StartGame()
 
-            // Create synthetic player sessions to drive the replay
-            val s0Session = nextSessionId.getAndIncrement()
-            val s1Session = nextSessionId.getAndIncrement()
-            val reviewBufferSize = 128
-
-            // Listener that waits for ReportTurnStart for a specific expected side
-            case class WaitForTurnStartForSide(side: Side, p: Promise[Unit])
-            val listener = actorSystem.actorOf(Props(new Actor {
-              private var waiting: Option[(Side, Promise[Unit])] = None
-              override def receive: Receive = {
-                case WaitForTurnStartForSide(side, p) =>
-                  waiting = Some((side, p))
-                case Protocol.ReportTurnStart(side) =>
-                  waiting match {
-                    case Some((expected, promise)) if expected == side =>
-                      promise.trySuccess(())
-                      waiting = None
-                    case _ => ()
-                  }
-                case (_: Protocol.Response) => () // ignore other responses
-                case _                      => ()
-              }
-            }))
-
-            val listenerSink =
-              Sink.actorRef[Protocol.Response](
-                listener,
-                onCompleteMessage = Status.Success(())
-              )
-            val out0 = Source
-              .actorRef[Protocol.Response](
-                reviewBufferSize,
-                OverflowStrategy.fail
-              )
-              .toMat(listenerSink)(Keep.left)
-              .run()
-            val out1 = Source
-              .actorRef[Protocol.Response](
-                reviewBufferSize,
-                OverflowStrategy.fail
-              )
-              .toMat(listenerSink)(Keep.left)
-              .run()
-            gameActor ! UserJoined(s0Session, "review0", Some(S0), out0)
-            gameActor ! UserJoined(s1Session, "review1", Some(S1), out1)
-
             val lines = Files.readAllLines(gameFile).asScala
             val turns = TurnParser.splitTurns(lines.toList)
             val turnsToPlay = turns.slice(0, ply)
 
-            // The first turn is S0's, then alternates
-            var sideOfTurn: Side = S0
+            // Start from the current side as established by the game state
+            var sideOfTurn: Side = gameState.game.curSide
 
             var nextActionIdSuffix = 0
             def makeActionId(): String = {
@@ -1410,42 +1364,25 @@ if(!username || username.length == 0) {
               gameid + nextActionIdSuffix.toString
             }
 
-            // Drive replay asynchronously, waiting for ReportTurnStart between turns
-            def waitForNextTurnStart(expected: Side): Future[Unit] = {
-              val p = Promise[Unit]()
-              listener ! WaitForTurnStartForSide(expected, p)
-              p.future
-            }
-
-            val replayFut = turnsToPlay.foldLeft(Future.successful(())) {
-              (acc, turn) =>
-                acc.flatMap { _ =>
-                  println("turn: " + turn)
-                  val expectedNextSide = sideOfTurn.opp
-                  val sessionForThisTurn =
-                    if (sideOfTurn == S0) s0Session else s1Session
-                  val turnParser =
-                    new TurnParser(gameState, () => makeActionId())
-                  val waitFut = waitForNextTurnStart(expectedNextSide)
-                  // Send all actions for this turn
-                  turn.foreach { move =>
-                    turnParser.convertUMIMoveToActions(move).foreach { action =>
-                      println("action: " + action)
-                      val queryStr = Json.stringify(Json.toJson(action))
-                      gameActor ! QueryStr(sessionForThisTurn, queryStr)
-                    }
-                  }
-                  waitFut.map { _ =>
-                    sideOfTurn = sideOfTurn.opp
-                    println("finished turn; next side: " + sideOfTurn)
+            // Replay synchronously: parse each move to actions and apply immediately
+            turnsToPlay.foreach { turn =>
+              println("turn: " + turn)
+              val turnParser = new TurnParser(gameState, () => makeActionId())
+              turn.foreach { move =>
+                val actions = turnParser.convertUMIMoveToActions(move)
+                actions.foreach { action =>
+                  println("action: " + action)
+                  gameState.applyQuerySync(action, sideOfTurn) match {
+                    case Success(()) => ()
+                    case Failure(e) =>
+                      println(s"Replay failed applying action $action: ${e.getMessage}")
+                      throw e
                   }
                 }
-            }
-
-            // Remove synthetic sessions when replay completes
-            replayFut.onComplete { _ =>
-              gameActor ! UserLeft(s0Session)
-              gameActor ! UserLeft(s1Session)
+              }
+              // After finishing the turn, use the game's current side as the next side
+              sideOfTurn = gameState.game.curSide
+              println("finished turn; next side: " + sideOfTurn)
             }
 
             redirect(

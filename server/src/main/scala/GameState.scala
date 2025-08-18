@@ -679,6 +679,123 @@ case class GameState(
   def currentSideSecondsPerTurn(): Double = {
     secondsPerTurn(game.curSide)
   }
+
+  // Synchronous application of a Query for the given side, used for replay.
+  // Mirrors handleQuery for DoBoardAction and DoGameAction, including legality checks and broadcasts.
+  // Uses a no-op scheduler for end-of-turn processing to avoid async timers during replay.
+  def applyQuerySync(query: Protocol.Query, side: Side): Try[Unit] = {
+    query match {
+      case Protocol.DoBoardAction(boardIdx, boardAction) =>
+        if (boardIdx < 0 || boardIdx >= numBoards)
+          Failure(new Exception("Invalid boardIdx"))
+        else if (game.winner.nonEmpty)
+          Failure(new Exception("Game is over"))
+        else if (boards(boardIdx).curState().side != side)
+          Failure(new Exception("Currently the other team's turn"))
+        else {
+          val specialResult: Try[Unit] = boardAction match {
+            case (_: PlayerActions)  => Success(())
+            case (_: LocalPieceUndo) => Success(())
+            case (_: SpellUndo)      => Success(())
+            case (_: Redo)           => Success(())
+            case BuyReinforcementUndo(pieceName, _) =>
+              boards(boardIdx)
+                .tryLegality(boardAction, externalInfo)
+                .flatMap { case () =>
+                  boards(boardIdx).findBuyReinforcementUndoAction(pieceName) match {
+                    case None =>
+                      Failure(new Exception("BUG? Could not find buy reinforcement action that would be undone"))
+                    case Some(BuyReinforcement(_, free)) =>
+                      if (free) Success(())
+                      else performAndBroadcastGameActionIfLegal(UnpayForReinforcement(side, pieceName))
+                    case Some(_) =>
+                      Failure(new Exception("BUG? Buy reinforcement action that would be undone is wrong type"))
+                  }
+                }
+            case GainSpellUndo(spellId, _) =>
+              boards(boardIdx)
+                .tryLegality(boardAction, externalInfo)
+                .flatMap { case () =>
+                  performAndBroadcastGameActionIfLegal(UnchooseSpell(side, spellId, boardIdx))
+                }
+            case DoGeneralBoardAction(generalBoardAction, _) =>
+              generalBoardAction match {
+                case BuyReinforcement(pieceName, free) =>
+                  boards(boardIdx)
+                    .tryLegality(boardAction, externalInfo)
+                    .flatMap { case () =>
+                      if (free) Success(())
+                      else performAndBroadcastGameActionIfLegal(PayForReinforcement(side, pieceName))
+                    }
+                case GainSpell(spellId) =>
+                  boards(boardIdx)
+                    .tryLegality(boardAction, externalInfo)
+                    .flatMap { case () =>
+                      performAndBroadcastGameActionIfLegal(ChooseSpell(side, spellId, boardIdx))
+                    }
+              }
+          }
+
+          specialResult.flatMap { case () =>
+            boards(boardIdx).doAction(boardAction, externalInfo)
+          }.map { case () =>
+            boardAction match {
+              case PlayerActions(actions, _) =>
+                actions.foreach {
+                  case PlaySpell(spellId, _) =>
+                    revealSpellsToSide(game.curSide.opp, Array(spellId), revealToSpectators = true)
+                  case DiscardSpell(spellId) =>
+                    revealSpellsToSide(game.curSide.opp, Array(spellId), revealToSpectators = true)
+                  case (_: Movements) | (_: Attack) | (_: Spawn) | (_: ActivateTile) | (_: ActivateAbility) | (_: Blink) | (_: Teleport) => ()
+                }
+              case (_: LocalPieceUndo) | (_: SpellUndo) | (_: BuyReinforcementUndo) | (_: GainSpellUndo) | (_: DoGeneralBoardAction) | (_: Redo) => ()
+            }
+
+            maybeUnsetBoardDone(boardIdx)
+
+            boardSequences(boardIdx) += 1
+            broadcastAll(Protocol.ReportBoardAction(boardIdx, boardAction, boardSequences(boardIdx)))
+          }
+        }
+
+      case Protocol.DoGameAction(gameAction) =>
+        if (game.winner.nonEmpty)
+          Failure(new Exception("Game is over"))
+        else if (game.curSide != side)
+          Failure(new Exception("Currently the other team's turn"))
+        else {
+          val specialResult: Try[Unit] = gameAction match {
+            case (_: PerformTech) | (_: UndoTech) | (_: SetBoardDone) | (_: SellTech) | (_: UnsellTech) => Success(())
+            case BuyExtraTechAndSpell(_) =>
+              refillUpcomingSpells()
+              Success(())
+            case UnbuyExtraTechAndSpell(_) => Success(())
+            case ResignBoard(boardIdx) =>
+              game.tryIsLegal(gameAction).map { case () =>
+                boards(boardIdx).curState.hasLost = true
+                allMessages = allMessages :+ ("GAME: Team " + game.curSide.toColorName + " resigned board " + (boardIdx + 1) + "!")
+                broadcastMessages()
+              }
+            case (_: PayForReinforcement) | (_: UnpayForReinforcement) | (_: AddWin) | (_: AddUpcomingSpells) | (_: ChooseSpell) | (_: UnchooseSpell) =>
+              Failure(new Exception("Only server allowed to send this action"))
+          }
+
+          specialResult.flatMap { case () => game.doAction(gameAction) }.map { case () =>
+            gameSequence += 1
+            broadcastAll(Protocol.ReportGameAction(gameAction, gameSequence))
+            game.winner.foreach { winner =>
+              allMessages = allMessages :+ ("GAME: Team " + winner.toColorName + " won the game!")
+              broadcastMessages()
+            }
+            // Use a no-op scheduler during synchronous replay
+            maybeDoEndOfTurn(_ => ())
+          }
+        }
+
+      case _ =>
+        Failure(new Exception("Unsupported query type for synchronous apply"))
+    }
+  }
 }
 
 object GameState {

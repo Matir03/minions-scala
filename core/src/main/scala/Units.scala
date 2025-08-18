@@ -440,13 +440,14 @@ object Units {
   )
 
   val rat = createPieceStats(
-    name = "bone rat",
+    name = "rat",
     cost = 2,
     rebate = 1,
     moveRange = 1,
     attackRange = 1,
-    attackEffect = Some(Damage(5)),
+    attackEffect = Some(Damage(1)),
     defense = Some(1),
+    numAttacks = 5,
     spawnRange = Some(1)
   )
 
