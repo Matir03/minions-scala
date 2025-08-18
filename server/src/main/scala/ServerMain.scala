@@ -1,7 +1,7 @@
 package minionsgame.server
 
 import scala.util.{Try, Success, Failure}
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import java.util.concurrent.atomic.AtomicInteger
 import com.typesafe.config.ConfigFactory
 import java.util.Calendar
@@ -1352,13 +1352,41 @@ if(!username || username.length == 0) {
             val s0Session = nextSessionId.getAndIncrement()
             val s1Session = nextSessionId.getAndIncrement()
             val reviewBufferSize = 128
+
+            // Listener that waits for ReportTurnStart for a specific expected side
+            case class WaitForTurnStartForSide(side: Side, p: Promise[Unit])
+            val listener = actorSystem.actorOf(Props(new Actor {
+              private var waiting: Option[(Side, Promise[Unit])] = None
+              override def receive: Receive = {
+                case WaitForTurnStartForSide(side, p) =>
+                  waiting = Some((side, p))
+                case Protocol.ReportTurnStart(side) =>
+                  waiting match {
+                    case Some((expected, promise)) if expected == side =>
+                      promise.trySuccess(())
+                      waiting = None
+                    case _ => ()
+                  }
+                case (_: Protocol.Response) => () // ignore other responses
+                case _ => ()
+              }
+            }))
+
+            val listenerSink =
+              Sink.actorRef[Protocol.Response](listener, onCompleteMessage = Status.Success(()))
             val out0 = Source
-              .actorRef[Protocol.Response](reviewBufferSize, OverflowStrategy.fail)
-              .toMat(Sink.ignore)(Keep.left)
+              .actorRef[Protocol.Response](
+                reviewBufferSize,
+                OverflowStrategy.fail
+              )
+              .toMat(listenerSink)(Keep.left)
               .run()
             val out1 = Source
-              .actorRef[Protocol.Response](reviewBufferSize, OverflowStrategy.fail)
-              .toMat(Sink.ignore)(Keep.left)
+              .actorRef[Protocol.Response](
+                reviewBufferSize,
+                OverflowStrategy.fail
+              )
+              .toMat(listenerSink)(Keep.left)
               .run()
             gameActor ! UserJoined(s0Session, "review0", Some(S0), out0)
             gameActor ! UserJoined(s1Session, "review1", Some(S1), out1)
@@ -1376,28 +1404,46 @@ if(!username || username.length == 0) {
               gameid + nextActionIdSuffix.toString
             }
 
-            turnsToPlay.foreach { turn =>
-              println("turn: " + turn)
-              val turnParser = new TurnParser(gameState, () => makeActionId())
-              turn.foreach { move =>
-                turnParser.convertUMIMoveToActions(move).foreach { action =>
-                  println("action: " + action)
-                  val sessionForThisTurn = if (sideOfTurn == S0) s0Session else s1Session
-                  val queryStr = Json.stringify(Json.toJson(action))
-                  gameActor ! QueryStr(sessionForThisTurn, queryStr)
-                }
-              }
-              // After finishing a turn, flip the side
-              sideOfTurn = sideOfTurn.opp
-              println("finished turn")
+            // Drive replay asynchronously, waiting for ReportTurnStart between turns
+            def waitForNextTurnStart(expected: Side): Future[Unit] = {
+              val p = Promise[Unit]()
+              listener ! WaitForTurnStartForSide(expected, p)
+              p.future
             }
 
-            // Remove synthetic sessions now that replay is done
-            gameActor ! UserLeft(s0Session)
-            gameActor ! UserLeft(s1Session)
+            val replayFut = turnsToPlay.foldLeft(Future.successful(())) {
+              (acc, turn) =>
+                acc.flatMap { _ =>
+                  println("turn: " + turn)
+                  val expectedNextSide = sideOfTurn.opp
+                  val sessionForThisTurn = if (sideOfTurn == S0) s0Session else s1Session
+                  val turnParser = new TurnParser(gameState, () => makeActionId())
+                  val waitFut = waitForNextTurnStart(expectedNextSide)
+                  // Send all actions for this turn
+                  turn.foreach { move =>
+                    turnParser.convertUMIMoveToActions(move).foreach { action =>
+                      println("action: " + action)
+                      val queryStr = Json.stringify(Json.toJson(action))
+                      gameActor ! QueryStr(sessionForThisTurn, queryStr)
+                    }
+                  }
+                  waitFut.map { _ =>
+                    sideOfTurn = sideOfTurn.opp
+                    println("finished turn; next side: " + sideOfTurn)
+                  }
+                }
+            }
+
+            // Remove synthetic sessions when replay completes
+            replayFut.onComplete { _ =>
+              gameActor ! UserLeft(s0Session)
+              gameActor ! UserLeft(s1Session)
+            }
 
             redirect(
-              s"/play?game=$gameid&username=review&ply=$ply&reviewdir=${java.net.URLEncoder.encode(dir, java.nio.charset.StandardCharsets.UTF_8.toString)}&reviewfile=${java.net.URLEncoder.encode(file, java.nio.charset.StandardCharsets.UTF_8.toString)}",
+              s"/play?game=$gameid&username=review&ply=$ply&reviewdir=${java.net.URLEncoder
+                  .encode(dir, java.nio.charset.StandardCharsets.UTF_8.toString)}&reviewfile=${java.net.URLEncoder
+                  .encode(file, java.nio.charset.StandardCharsets.UTF_8.toString)}",
               StatusCodes.SeeOther
             )
           }
