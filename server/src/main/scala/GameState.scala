@@ -694,7 +694,8 @@ object GameState {
       maps_opt: Option[List[String]],
       seed_opt: Option[Long],
       password: Option[String],
-      testingSetup: Boolean
+      testingSetup: Boolean,
+      randomizeTechLine: Boolean
   ): GameState = {
     val config =
       ConfigFactory.parseFile(new java.io.File(AppPaths.applicationConf))
@@ -716,7 +717,7 @@ object GameState {
         (tech, idx)
       }
       val orderedTechs =
-        if (!config.getBoolean("app.randomizeTechLine"))
+        if (!randomizeTechLine)
           techsWithIdx.toArray
         else {
           // First few techs are always the same

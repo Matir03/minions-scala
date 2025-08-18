@@ -614,7 +614,8 @@ if(!username || username.length == 0) {
               maps_opt,
               seed_opt,
               None,
-              false
+              testingSetup = false,
+              randomizeTechLine = true
             )
             val gameActor =
               actorSystem.actorOf(Props(classOf[GameActor], gameState, gameid))
@@ -1094,7 +1095,8 @@ if(!username || username.length == 0) {
                                     maps_opt,
                                     seed_opt,
                                     passwordOpt,
-                                    false
+                                    testingSetup = false,
+                                    randomizeTechLine = true
                                   )
                               }
                             val gameActor = actorSystem.actorOf(
@@ -1340,7 +1342,8 @@ if(!username || username.length == 0) {
               maps_opt,
               seed_opt,
               None,
-              false
+              testingSetup = false,
+              randomizeTechLine = false
             )
             val gameActor = actorSystem.actorOf(
               Props(classOf[GameActor], gameState, gameid)
@@ -1368,12 +1371,15 @@ if(!username || username.length == 0) {
                     case _ => ()
                   }
                 case (_: Protocol.Response) => () // ignore other responses
-                case _ => ()
+                case _                      => ()
               }
             }))
 
             val listenerSink =
-              Sink.actorRef[Protocol.Response](listener, onCompleteMessage = Status.Success(()))
+              Sink.actorRef[Protocol.Response](
+                listener,
+                onCompleteMessage = Status.Success(())
+              )
             val out0 = Source
               .actorRef[Protocol.Response](
                 reviewBufferSize,
@@ -1416,8 +1422,10 @@ if(!username || username.length == 0) {
                 acc.flatMap { _ =>
                   println("turn: " + turn)
                   val expectedNextSide = sideOfTurn.opp
-                  val sessionForThisTurn = if (sideOfTurn == S0) s0Session else s1Session
-                  val turnParser = new TurnParser(gameState, () => makeActionId())
+                  val sessionForThisTurn =
+                    if (sideOfTurn == S0) s0Session else s1Session
+                  val turnParser =
+                    new TurnParser(gameState, () => makeActionId())
                   val waitFut = waitForNextTurnStart(expectedNextSide)
                   // Send all actions for this turn
                   turn.foreach { move =>
