@@ -87,6 +87,24 @@
         border:1px solid #ccddcc;
         box-shadow:inset 0px 1px 2px #cccccc;
       }
+      #review-controls {
+        position:absolute;
+        right: 8px;
+        bottom: calc(44% + 8px);
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-family: sans-serif;
+        z-index: 10;
+      }
+      #review-controls label {
+        margin-right: 6px;
+        font-size: 12px;
+      }
+      #review-ply {
+        width: 64px;
+      }
       #global-chat-button {
         outline:0;
       }
@@ -101,6 +119,10 @@
   </head>
   <body>
   <div id="main">
+    <div id="review-controls" class="invisible">
+      <label for="review-ply">Ply:</label>
+      <input id="review-ply" type="number" min="0" step="1" />
+    </div>
     <canvas id="board" oncontextmenu="return false;"></canvas>
     <div id="chat">
       <div id="chat-tab-panel">

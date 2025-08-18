@@ -1330,7 +1330,7 @@ if(!username || username.length == 0) {
             val maps_opt = Some(List("Blackened Shores", "Midnight Lake"))
             val seed_opt = None
 
-            val gameid = chooseGameName("review")
+            val gameid = s"review-${dir}-${file}"
             val gameState = GameState.createNormal(
               secondsPerTurn,
               startingSouls,
@@ -1371,7 +1371,7 @@ if(!username || username.length == 0) {
             }
 
             redirect(
-              s"/play?game=$gameid&username=review",
+              s"/play?game=$gameid&username=review&ply=$ply&reviewdir=${java.net.URLEncoder.encode(dir, java.nio.charset.StandardCharsets.UTF_8.toString)}&reviewfile=${java.net.URLEncoder.encode(file, java.nio.charset.StandardCharsets.UTF_8.toString)}",
               StatusCodes.SeeOther
             )
           }

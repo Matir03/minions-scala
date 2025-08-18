@@ -180,6 +180,58 @@ class Client() {
   val messages = jQuery("#messages").get(0).asInstanceOf[TextArea]
   val playersBox = jQuery("#players").get(0).asInstanceOf[TextArea]
   val chat = jQuery("#chat-input").get(0).asInstanceOf[Input]
+  val reviewPlyInput = jQuery("#review-ply").get(0).asInstanceOf[Input]
+  val reviewControls = jQuery("#review-controls")
+
+  // --- Review controls ---
+  private def parseQuery(): Map[String, String] = {
+    val params = (new java.net.URI(window.location.href)).getQuery()
+    if (params == null || params.isEmpty) Map()
+    else {
+      params
+        .split("&")
+        .flatMap { piece =>
+          piece.split("=").toList match {
+            case Nil              => None
+            case _ :: Nil         => None
+            case k :: v :: Nil    => Some((k, v))
+            case _ :: _ :: _ :: _ => None
+          }
+        }
+        .toMap
+    }
+  }
+  private val reviewInfoOpt: Option[(String, String, Int)] = {
+    val q = parseQuery()
+    (q.get("reviewdir"), q.get("reviewfile")) match {
+      case (Some(dir), Some(file)) =>
+        val ply = Try(q.getOrElse("ply", "0").toInt).getOrElse(0)
+        Some((dir, file, ply))
+      case _ => None
+    }
+  }
+  private def redirectToReview(dir: String, file: String, m: Int): Unit = {
+    window.location.href = s"/review/$dir/$file?ply=$m"
+  }
+  private def setupReviewControls(): Unit = {
+    reviewInfoOpt match {
+      case Some((dir, file, ply)) =>
+        reviewControls.removeClass("invisible")
+        reviewPlyInput.value = ply.toString
+        reviewPlyInput.onchange = { (_: org.scalajs.dom.Event) =>
+          val m = Try(reviewPlyInput.value.toInt).getOrElse(0)
+          redirectToReview(dir, file, m)
+        }
+        reviewPlyInput.onkeydown = { (e: KeyboardEvent) =>
+          if (e.keyCode == 13) {
+            e.preventDefault()
+            val m = Try(reviewPlyInput.value.toInt).getOrElse(0)
+            redirectToReview(dir, file, m)
+          }
+        }
+      case None => ()
+    }
+  }
 
   // State of game, as far as we can tell from the server
   var game: Option[Game] = None
@@ -815,6 +867,9 @@ class Client() {
   canvas.onmouseup = mouseup _
   canvas.onmouseout = mouseout _
   canvas.onselectstart = selectStart _
+
+  // Enable review UI if in review mode
+  setupReviewControls()
 
   setAllChat(allChat)
   draw()
