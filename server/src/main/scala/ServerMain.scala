@@ -1348,9 +1348,27 @@ if(!username || username.length == 0) {
             games = games + (gameid -> ((gameActor, gameState)))
             gameActor ! StartGame()
 
+            // Create synthetic player sessions to drive the replay
+            val s0Session = nextSessionId.getAndIncrement()
+            val s1Session = nextSessionId.getAndIncrement()
+            val reviewBufferSize = 128
+            val out0 = Source
+              .actorRef[Protocol.Response](reviewBufferSize, OverflowStrategy.fail)
+              .toMat(Sink.ignore)(Keep.left)
+              .run()
+            val out1 = Source
+              .actorRef[Protocol.Response](reviewBufferSize, OverflowStrategy.fail)
+              .toMat(Sink.ignore)(Keep.left)
+              .run()
+            gameActor ! UserJoined(s0Session, "review0", Some(S0), out0)
+            gameActor ! UserJoined(s1Session, "review1", Some(S1), out1)
+
             val lines = Files.readAllLines(gameFile).asScala
             val turns = TurnParser.splitTurns(lines.toList)
             val turnsToPlay = turns.slice(0, ply)
+
+            // The first turn is S0's, then alternates
+            var sideOfTurn: Side = S0
 
             var nextActionIdSuffix = 0
             def makeActionId(): String = {
@@ -1364,11 +1382,19 @@ if(!username || username.length == 0) {
               turn.foreach { move =>
                 turnParser.convertUMIMoveToActions(move).foreach { action =>
                   println("action: " + action)
-                  gameActor ! action
+                  val sessionForThisTurn = if (sideOfTurn == S0) s0Session else s1Session
+                  val queryStr = Json.stringify(Json.toJson(action))
+                  gameActor ! QueryStr(sessionForThisTurn, queryStr)
                 }
               }
+              // After finishing a turn, flip the side
+              sideOfTurn = sideOfTurn.opp
               println("finished turn")
             }
+
+            // Remove synthetic sessions now that replay is done
+            gameActor ! UserLeft(s0Session)
+            gameActor ! UserLeft(s1Session)
 
             redirect(
               s"/play?game=$gameid&username=review&ply=$ply&reviewdir=${java.net.URLEncoder.encode(dir, java.nio.charset.StandardCharsets.UTF_8.toString)}&reviewfile=${java.net.URLEncoder.encode(file, java.nio.charset.StandardCharsets.UTF_8.toString)}",
