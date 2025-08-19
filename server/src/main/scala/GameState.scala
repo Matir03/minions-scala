@@ -278,7 +278,7 @@ case class GameState(
       }
     }
 
-    // Accumulate souls on all the boards for the side about to move
+    // Accumulate death souls for the side about to move
     val souls = boards.foldLeft(game.extraSoulsPerTurn(newSide)) {
       case (sum, board) =>
         sum + board.curState.soulsThisRound(newSide)
@@ -756,7 +756,7 @@ case class GameState(
       s"$reset|$rein0|$rein1|||$position"
     }
 
-    val money = s"${game.souls(S0)}|${game.souls(S1)}"
+    val money = s"${totalSouls(S0)}|${totalSouls(S1)}"
     val boardPoints = s"${game.wins(S0)}|${game.wins(S1)}"
     val techState = encodeTechState(game.techLine)
     // Encode each board's position and spells
@@ -977,6 +977,14 @@ case class GameState(
       case _ =>
         Failure(new Exception("Unsupported query type for synchronous apply"))
     }
+  }
+
+  def totalSouls(side: Side): Int = {
+    var total = game.souls(side)
+    for (i <- 0 until numBoards) {
+      total += boards(i).initialStateThisTurn.soulsThisRound(side)
+    }
+    total
   }
 }
 
