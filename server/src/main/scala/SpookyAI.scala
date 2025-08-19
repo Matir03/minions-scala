@@ -131,7 +131,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   }
 
   def getBestTurn(): List[String] = {
-    sendToEngine("position fen " + convertGameStateToFEN())
+    sendToEngine("position fen " + game.convertGameStateToFEN())
 
     sendToEngine("play nodes 1")
 
@@ -161,143 +161,6 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     case _ => ()
   }
 
-  private def convertGameStateToFEN(): String = {
-    /// fen <money> <board_points> <tech_state> <board_fen> ... <board_fen> <side_to_move> <turn_num>
-
-    def encodeTechState(techStates: Array[TechState]): String = {
-      // For each tech, compute state
-      val team0Spells = techStates
-        .slice(2, techStates.length)
-        .map { techState =>
-          techState.level.apply(S0).toString.charAt(0)
-        }
-        .mkString("")
-      val team1Spells = techStates
-        .slice(2, techStates.length)
-        .map { techState =>
-          techState.level.apply(S1).toString.charAt(0)
-        }
-        .mkString("")
-      s"$team0Spells|$team1Spells"
-    }
-
-    def encodeBoardPosition(board: Board): String = {
-      val boardState = board.curState()
-      val position = (0 to 9)
-        .map { y =>
-          var emptyCount = 0
-          val rowStr = new StringBuilder()
-          (0 to 9).foreach { x =>
-            boardState.pieces(Loc(x, y)) match {
-              case Nil => emptyCount += 1
-              case piece :: Nil =>
-                if (emptyCount > 0) {
-                  rowStr.append(emptyCount.toString)
-                  emptyCount = 0
-                }
-                rowStr.append(fenChar(piece.baseStats.name, piece.side))
-              case _ =>
-                throw new Exception("Unexpected multiple pieces at location")
-            }
-          }
-          if (emptyCount > 0) {
-            if (emptyCount == 10) {
-              rowStr.append("0")
-            } else {
-              rowStr.append(emptyCount.toString)
-            }
-          }
-          rowStr.toString()
-        }
-        .mkString("/")
-
-      val rein0 = (boardState
-        .reinforcements(S0)
-        .map { case (p, n) =>
-          (0 until n).map(_ => fenChar(p, S0)).mkString("")
-        } ++ boardState.allowedFreeBuyPieces(S0).map(fenChar(_, S0)))
-        .mkString("")
-
-      val rein1 = (boardState
-        .reinforcements(S1)
-        .map { case (p, n) =>
-          (0 until n).map(_ => fenChar(p, S1)).mkString("")
-        } ++ boardState.allowedFreeBuyPieces(S1).map(fenChar(_, S1)))
-        .mkString("")
-
-      val reset = boardState.resetState match {
-        case FirstTurn => "f"
-        case Normal    => "n"
-        case Reset1    => "1"
-        case Reset2    => "2"
-        case JustEnded =>
-          throw new Exception("JustEnded should never be sent to the AI")
-      }
-
-      s"$reset|$rein0|$rein1|||$position"
-    }
-
-    val money = s"${game.game.souls(S0)}|${game.game.souls(S1)}"
-    val boardPoints = s"${game.game.wins(S0)}|${game.game.wins(S1)}"
-    val techState = encodeTechState(game.game.techLine)
-    // Encode each board's position and spells
-    val boards = game.boards
-      .map { board => encodeBoardPosition(board) }
-      .mkString(" ")
-    val side = game.game.curSide.int
-    val turnNum = game.game.turnNumber
-
-    s"$money $boardPoints $techState $boards $side $turnNum"
-  }
-
-  private def fenChar(pieceName: PieceName, side: Side): Char = {
-    val char = pieceName match {
-      case "zombie"              => 'Z'
-      case "initiate"            => 'I'
-      case "skeleton"            => 'S'
-      case "serpent"             => 'P'
-      case "warg"                => 'W'
-      case "ghost"               => 'G'
-      case "wight"               => 'T'
-      case "haunt"               => 'H'
-      case "shrieker"            => 'K'
-      case "spectre"             => 'X'
-      case "rat"                 => 'A'
-      case "sorcerer"            => 'U'
-      case "witch"               => 'J'
-      case "vampire"             => 'V'
-      case "mummy"               => 'M'
-      case "lich"                => 'L'
-      case "void"                => 'O'
-      case "cerberus"            => 'C'
-      case "wraith"              => 'R'
-      case "horror"              => 'Q'
-      case "banshee"             => 'B'
-      case "elemental"           => 'E'
-      case "harpy"               => 'Y'
-      case "shadowlord"          => 'D'
-      case "necromancer"         => 'N'
-      case "arcane_necromancer"  => 'N'
-      case "ranged_necromancer"  => 'N'
-      case "mounted_necromancer" => 'N'
-      case "deadly_necromancer"  => 'N'
-      case "battle_necromancer"  => 'N'
-      case "zombie_necromancer"  => 'N'
-      case "mana_necromancer"    => 'N'
-      case "terrain_necromancer" => 'N'
-    }
-
-    if (side == S1) {
-      char.toLower
-    } else {
-      char
-    }
-  }
-
-  private def mapNameToFen(mapName: String): String = {
-    mapName.replaceAll(" ", "")
-  }
-
   private def getConfig(gameState: GameState): String = {
     val pointsToWin = gameState.game.targetNumWins
     val maps = gameState.boardNames.map(mapNameToFen).mkString(",")
@@ -306,7 +169,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
         .slice(2, gameState.game.techLine.length)
         .map(t =>
           t.tech match {
-            case PieceTech(pieceName) => fenChar(pieceName, S0)
+            case PieceTech(pieceName) => game.fenChar(pieceName, S0)
             case Copycat              => '1'
             case TechSeller           => '2'
             case Metamagic            => '3'
@@ -316,6 +179,9 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     s"$pointsToWin $maps $techs"
   }
 
+  private def mapNameToFen(mapName: String): String = {
+    mapName.replaceAll(" ", "")
+  }
 }
 
 object SpookyAI {

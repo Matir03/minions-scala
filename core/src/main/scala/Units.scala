@@ -560,6 +560,7 @@ object Units {
     attackRange = 1,
     attackEffect = Some(Damage(1)),
     numAttacks = 20,
+    canBlink = true,
     defense = Some(6)
   )
 

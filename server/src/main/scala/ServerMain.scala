@@ -1352,8 +1352,9 @@ if(!username || username.length == 0) {
             gameActor ! StartGame()
 
             val lines = Files.readAllLines(gameFile).asScala
-            val turns = TurnParser.splitTurns(lines.toList)
+            val (fens, turns) = TurnParser.splitTurns(lines.toList)
             val turnsToPlay = turns.slice(0, ply)
+            val turnsWithFens = turnsToPlay.zip(fens)
 
             // Start from the current side as established by the game state
             var sideOfTurn: Side = gameState.game.curSide
@@ -1365,7 +1366,12 @@ if(!username || username.length == 0) {
             }
 
             // Replay synchronously: parse each move to actions and apply immediately
-            turnsToPlay.foreach { turn =>
+            turnsWithFens.foreach { case (turn, fen) =>
+              val gameFen = "fen " + gameState.convertGameStateToFEN()
+              if (gameFen != fen) {
+                println(s"FEN mismatch: expected \n$fen\n, got \n$gameFen\n")
+                // throw new Error("FEN mismatch")
+              }
               println("turn: " + turn)
               val turnParser = new TurnParser(gameState, () => makeActionId())
               turn.foreach { move =>
@@ -1375,14 +1381,17 @@ if(!username || username.length == 0) {
                   gameState.applyQuerySync(action, sideOfTurn) match {
                     case Success(()) => ()
                     case Failure(e) =>
-                      println(s"Replay failed applying action $action: ${e.getMessage}")
+                      println(
+                        s"Replay failed applying action $action: ${e.getMessage}"
+                      )
                       throw e
                   }
                 }
               }
+
               // After finishing the turn, use the game's current side as the next side
               sideOfTurn = gameState.game.curSide
-              println("finished turn; next side: " + sideOfTurn)
+            // println("finished turn; next side: " + sideOfTurn)
             }
 
             redirect(

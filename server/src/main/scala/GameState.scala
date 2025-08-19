@@ -680,6 +680,139 @@ case class GameState(
     secondsPerTurn(game.curSide)
   }
 
+  def convertGameStateToFEN(): String = {
+    /// fen <money> <board_points> <tech_state> <board_fen> ... <board_fen> <side_to_move> <turn_num>
+
+    def encodeTechState(techStates: Array[TechState]): String = {
+      // For each tech, compute state
+      val team0Spells = techStates
+        .slice(2, techStates.length)
+        .map { techState =>
+          techState.level.apply(S0).toString.charAt(0)
+        }
+        .mkString("")
+      val team1Spells = techStates
+        .slice(2, techStates.length)
+        .map { techState =>
+          techState.level.apply(S1).toString.charAt(0)
+        }
+        .mkString("")
+      s"$team0Spells|$team1Spells"
+    }
+
+    def encodeBoardPosition(board: Board): String = {
+      val boardState = board.curState()
+      val position = (0 to 9)
+        .map { y =>
+          var emptyCount = 0
+          val rowStr = new StringBuilder()
+          (0 to 9).foreach { x =>
+            boardState.pieces(Loc(x, y)) match {
+              case Nil => emptyCount += 1
+              case piece :: Nil =>
+                if (emptyCount > 0) {
+                  rowStr.append(emptyCount.toString)
+                  emptyCount = 0
+                }
+                rowStr.append(fenChar(piece.baseStats.name, piece.side))
+              case _ =>
+                throw new Exception("Unexpected multiple pieces at location")
+            }
+          }
+          if (emptyCount > 0) {
+            if (emptyCount == 10) {
+              rowStr.append("0")
+            } else {
+              rowStr.append(emptyCount.toString)
+            }
+          }
+          rowStr.toString()
+        }
+        .mkString("/")
+
+      val rein0 = (boardState
+        .reinforcements(S0)
+        .map { case (p, n) =>
+          (0 until n).map(_ => fenChar(p, S0)).mkString("")
+        } ++ boardState.allowedFreeBuyPieces(S0).map(fenChar(_, S0)))
+        .mkString("")
+
+      val rein1 = (boardState
+        .reinforcements(S1)
+        .map { case (p, n) =>
+          (0 until n).map(_ => fenChar(p, S1)).mkString("")
+        } ++ boardState.allowedFreeBuyPieces(S1).map(fenChar(_, S1)))
+        .mkString("")
+
+      val reset = boardState.resetState match {
+        case FirstTurn => "f"
+        case Normal    => "n"
+        case Reset1    => "1"
+        case Reset2    => "2"
+        case JustEnded =>
+          throw new Exception("JustEnded should never be sent to the AI")
+      }
+
+      s"$reset|$rein0|$rein1|||$position"
+    }
+
+    val money = s"${game.souls(S0)}|${game.souls(S1)}"
+    val boardPoints = s"${game.wins(S0)}|${game.wins(S1)}"
+    val techState = encodeTechState(game.techLine)
+    // Encode each board's position and spells
+    val boardFens = boards
+      .map { board => encodeBoardPosition(board) }
+      .mkString(" ")
+    val side = game.curSide.int
+    val turnNum = game.turnNumber + 1
+
+    s"$money $boardPoints $techState $boardFens $side $turnNum"
+  }
+
+  def fenChar(pieceName: PieceName, side: Side): Char = {
+    val char = pieceName match {
+      case "zombie"              => 'Z'
+      case "initiate"            => 'I'
+      case "skeleton"            => 'S'
+      case "serpent"             => 'P'
+      case "warg"                => 'W'
+      case "ghost"               => 'G'
+      case "wight"               => 'T'
+      case "haunt"               => 'H'
+      case "shrieker"            => 'K'
+      case "spectre"             => 'X'
+      case "rat"                 => 'A'
+      case "sorcerer"            => 'U'
+      case "witch"               => 'J'
+      case "vampire"             => 'V'
+      case "mummy"               => 'M'
+      case "lich"                => 'L'
+      case "void"                => 'O'
+      case "cerberus"            => 'C'
+      case "wraith"              => 'R'
+      case "horror"              => 'Q'
+      case "banshee"             => 'B'
+      case "elemental"           => 'E'
+      case "harpy"               => 'Y'
+      case "shadowlord"          => 'D'
+      case "necromancer"         => 'N'
+      case "arcane_necromancer"  => 'N'
+      case "ranged_necromancer"  => 'N'
+      case "mounted_necromancer" => 'N'
+      case "deadly_necromancer"  => 'N'
+      case "battle_necromancer"  => 'N'
+      case "zombie_necromancer"  => 'N'
+      case "mana_necromancer"    => 'N'
+      case "terrain_necromancer" => 'N'
+    }
+
+    if (side == S1) {
+      char.toLower
+    } else {
+      char
+    }
+  }
+
   // Synchronous application of a Query for the given side, used for replay.
   // Mirrors handleQuery for DoBoardAction and DoGameAction, including legality checks and broadcasts.
   // Uses a no-op scheduler for end-of-turn processing to avoid async timers during replay.
@@ -702,21 +835,36 @@ case class GameState(
               boards(boardIdx)
                 .tryLegality(boardAction, externalInfo)
                 .flatMap { case () =>
-                  boards(boardIdx).findBuyReinforcementUndoAction(pieceName) match {
+                  boards(boardIdx).findBuyReinforcementUndoAction(
+                    pieceName
+                  ) match {
                     case None =>
-                      Failure(new Exception("BUG? Could not find buy reinforcement action that would be undone"))
+                      Failure(
+                        new Exception(
+                          "BUG? Could not find buy reinforcement action that would be undone"
+                        )
+                      )
                     case Some(BuyReinforcement(_, free)) =>
                       if (free) Success(())
-                      else performAndBroadcastGameActionIfLegal(UnpayForReinforcement(side, pieceName))
+                      else
+                        performAndBroadcastGameActionIfLegal(
+                          UnpayForReinforcement(side, pieceName)
+                        )
                     case Some(_) =>
-                      Failure(new Exception("BUG? Buy reinforcement action that would be undone is wrong type"))
+                      Failure(
+                        new Exception(
+                          "BUG? Buy reinforcement action that would be undone is wrong type"
+                        )
+                      )
                   }
                 }
             case GainSpellUndo(spellId, _) =>
               boards(boardIdx)
                 .tryLegality(boardAction, externalInfo)
                 .flatMap { case () =>
-                  performAndBroadcastGameActionIfLegal(UnchooseSpell(side, spellId, boardIdx))
+                  performAndBroadcastGameActionIfLegal(
+                    UnchooseSpell(side, spellId, boardIdx)
+                  )
                 }
             case DoGeneralBoardAction(generalBoardAction, _) =>
               generalBoardAction match {
@@ -725,37 +873,64 @@ case class GameState(
                     .tryLegality(boardAction, externalInfo)
                     .flatMap { case () =>
                       if (free) Success(())
-                      else performAndBroadcastGameActionIfLegal(PayForReinforcement(side, pieceName))
+                      else
+                        performAndBroadcastGameActionIfLegal(
+                          PayForReinforcement(side, pieceName)
+                        )
                     }
                 case GainSpell(spellId) =>
                   boards(boardIdx)
                     .tryLegality(boardAction, externalInfo)
                     .flatMap { case () =>
-                      performAndBroadcastGameActionIfLegal(ChooseSpell(side, spellId, boardIdx))
+                      performAndBroadcastGameActionIfLegal(
+                        ChooseSpell(side, spellId, boardIdx)
+                      )
                     }
               }
           }
 
-          specialResult.flatMap { case () =>
-            boards(boardIdx).doAction(boardAction, externalInfo)
-          }.map { case () =>
-            boardAction match {
-              case PlayerActions(actions, _) =>
-                actions.foreach {
-                  case PlaySpell(spellId, _) =>
-                    revealSpellsToSide(game.curSide.opp, Array(spellId), revealToSpectators = true)
-                  case DiscardSpell(spellId) =>
-                    revealSpellsToSide(game.curSide.opp, Array(spellId), revealToSpectators = true)
-                  case (_: Movements) | (_: Attack) | (_: Spawn) | (_: ActivateTile) | (_: ActivateAbility) | (_: Blink) | (_: Teleport) => ()
-                }
-              case (_: LocalPieceUndo) | (_: SpellUndo) | (_: BuyReinforcementUndo) | (_: GainSpellUndo) | (_: DoGeneralBoardAction) | (_: Redo) => ()
+          specialResult
+            .flatMap { case () =>
+              boards(boardIdx).doAction(boardAction, externalInfo)
             }
+            .map { case () =>
+              boardAction match {
+                case PlayerActions(actions, _) =>
+                  actions.foreach {
+                    case PlaySpell(spellId, _) =>
+                      revealSpellsToSide(
+                        game.curSide.opp,
+                        Array(spellId),
+                        revealToSpectators = true
+                      )
+                    case DiscardSpell(spellId) =>
+                      revealSpellsToSide(
+                        game.curSide.opp,
+                        Array(spellId),
+                        revealToSpectators = true
+                      )
+                    case (_: Movements) | (_: Attack) | (_: Spawn) |
+                        (_: ActivateTile) | (_: ActivateAbility) | (_: Blink) |
+                        (_: Teleport) =>
+                      ()
+                  }
+                case (_: LocalPieceUndo) | (_: SpellUndo) |
+                    (_: BuyReinforcementUndo) | (_: GainSpellUndo) |
+                    (_: DoGeneralBoardAction) | (_: Redo) =>
+                  ()
+              }
 
-            maybeUnsetBoardDone(boardIdx)
+              maybeUnsetBoardDone(boardIdx)
 
-            boardSequences(boardIdx) += 1
-            broadcastAll(Protocol.ReportBoardAction(boardIdx, boardAction, boardSequences(boardIdx)))
-          }
+              boardSequences(boardIdx) += 1
+              broadcastAll(
+                Protocol.ReportBoardAction(
+                  boardIdx,
+                  boardAction,
+                  boardSequences(boardIdx)
+                )
+              )
+            }
         }
 
       case Protocol.DoGameAction(gameAction) =>
@@ -765,7 +940,9 @@ case class GameState(
           Failure(new Exception("Currently the other team's turn"))
         else {
           val specialResult: Try[Unit] = gameAction match {
-            case (_: PerformTech) | (_: UndoTech) | (_: SetBoardDone) | (_: SellTech) | (_: UnsellTech) => Success(())
+            case (_: PerformTech) | (_: UndoTech) | (_: SetBoardDone) |
+                (_: SellTech) | (_: UnsellTech) =>
+              Success(())
             case BuyExtraTechAndSpell(_) =>
               refillUpcomingSpells()
               Success(())
@@ -773,22 +950,27 @@ case class GameState(
             case ResignBoard(boardIdx) =>
               game.tryIsLegal(gameAction).map { case () =>
                 boards(boardIdx).curState.hasLost = true
-                allMessages = allMessages :+ ("GAME: Team " + game.curSide.toColorName + " resigned board " + (boardIdx + 1) + "!")
+                allMessages =
+                  allMessages :+ ("GAME: Team " + game.curSide.toColorName + " resigned board " + (boardIdx + 1) + "!")
                 broadcastMessages()
               }
-            case (_: PayForReinforcement) | (_: UnpayForReinforcement) | (_: AddWin) | (_: AddUpcomingSpells) | (_: ChooseSpell) | (_: UnchooseSpell) =>
+            case (_: PayForReinforcement) | (_: UnpayForReinforcement) |
+                (_: AddWin) | (_: AddUpcomingSpells) | (_: ChooseSpell) |
+                (_: UnchooseSpell) =>
               Failure(new Exception("Only server allowed to send this action"))
           }
 
-          specialResult.flatMap { case () => game.doAction(gameAction) }.map { case () =>
-            gameSequence += 1
-            broadcastAll(Protocol.ReportGameAction(gameAction, gameSequence))
-            game.winner.foreach { winner =>
-              allMessages = allMessages :+ ("GAME: Team " + winner.toColorName + " won the game!")
-              broadcastMessages()
-            }
-            // Use a no-op scheduler during synchronous replay
-            maybeDoEndOfTurn(_ => ())
+          specialResult.flatMap { case () => game.doAction(gameAction) }.map {
+            case () =>
+              gameSequence += 1
+              broadcastAll(Protocol.ReportGameAction(gameAction, gameSequence))
+              game.winner.foreach { winner =>
+                allMessages =
+                  allMessages :+ ("GAME: Team " + winner.toColorName + " won the game!")
+                broadcastMessages()
+              }
+              // Use a no-op scheduler during synchronous replay
+              maybeDoEndOfTurn(_ => ())
           }
         }
 
