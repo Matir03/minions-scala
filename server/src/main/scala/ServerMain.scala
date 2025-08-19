@@ -1372,12 +1372,12 @@ if(!username || username.length == 0) {
                 println(s"FEN mismatch: expected \n$fen\n, got \n$gameFen\n")
                 // throw new Error("FEN mismatch")
               }
-              println("turn: " + turn)
+              // println("turn: " + turn)
               val turnParser = new TurnParser(gameState, () => makeActionId())
               turn.foreach { move =>
                 val actions = turnParser.convertUMIMoveToActions(move)
                 actions.foreach { action =>
-                  println("action: " + action)
+                  // println("action: " + action)
                   gameState.applyQuerySync(action, sideOfTurn) match {
                     case Success(()) => ()
                     case Failure(e) =>
