@@ -1352,9 +1352,9 @@ if(!username || username.length == 0) {
             gameActor ! StartGame()
 
             val lines = Files.readAllLines(gameFile).asScala
-            val (fens, turns) = TurnParser.splitTurns(lines.toList)
+            val (infos, fens, turns) = TurnParser.splitTurns(lines.toList)
             val turnsToPlay = turns.slice(0, ply)
-            val turnsWithFens = turnsToPlay.zip(fens)
+            val turnsWithInfo = turnsToPlay.zip(fens).zip(infos)
 
             // Start from the current side as established by the game state
             var sideOfTurn: Side = gameState.game.curSide
@@ -1366,18 +1366,21 @@ if(!username || username.length == 0) {
             }
 
             // Replay synchronously: parse each move to actions and apply immediately
-            turnsWithFens.foreach { case (turn, fen) =>
+            turnsWithInfo.foreach { case ((turn, fen), info) =>
               val gameFen = "fen " + gameState.convertGameStateToFEN()
               if (gameFen != fen) {
                 println(s"FEN mismatch: expected \n$fen\n, got \n$gameFen\n")
                 throw new Error("FEN mismatch")
               }
-              // println("turn: " + turn)
+
+              gameState.allMessages =
+                gameState.allMessages :+ ("Turn " + ply + ": " + info)
+              gameState.broadcastMessages()
+
               val turnParser = new TurnParser(gameState, () => makeActionId())
               turn.foreach { move =>
                 val actions = turnParser.convertUMIMoveToActions(move)
                 actions.foreach { action =>
-                  // println("action: " + action)
                   gameState.applyQuerySync(action, sideOfTurn) match {
                     case Success(()) => ()
                     case Failure(e) =>

@@ -204,14 +204,18 @@ class TurnParser(game: GameState, makeActionId: () => String) {
 }
 
 object TurnParser {
-  def splitTurns(lines: List[String]): (List[String], List[List[String]]) = {
+  def splitTurns(
+      lines: List[String]
+  ): (List[String], List[String], List[List[String]]) = {
     var fens = List[String]()
+    var infos = List[String]()
     var turns = List[List[String]]()
     var turn = List[String]()
     lines.foreach { line =>
       if (line.startsWith("fen")) {
         fens = fens :+ line
       } else if (line.startsWith("turn")) {
+        infos = infos :+ line
         if (turn.nonEmpty) {
           turns = turns :+ turn
           turn = List()
@@ -223,6 +227,6 @@ object TurnParser {
     if (turn.nonEmpty) {
       turns = turns :+ turn
     }
-    (fens, turns)
+    (infos, fens, turns)
   }
 }
