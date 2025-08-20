@@ -447,6 +447,7 @@ object Units {
     attackRange = 1,
     attackEffect = Some(Damage(1)),
     defense = Some(1),
+    isPersistent = true,
     numAttacks = 5,
     spawnRange = Some(1)
   )

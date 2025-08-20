@@ -1370,7 +1370,7 @@ if(!username || username.length == 0) {
               val gameFen = "fen " + gameState.convertGameStateToFEN()
               if (gameFen != fen) {
                 println(s"FEN mismatch: expected \n$fen\n, got \n$gameFen\n")
-                // throw new Error("FEN mismatch")
+                throw new Error("FEN mismatch")
               }
               // println("turn: " + turn)
               val turnParser = new TurnParser(gameState, () => makeActionId())

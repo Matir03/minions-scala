@@ -832,7 +832,6 @@ case class BoardState private (
         }
         numFreeBuysAllowed(side) -= 1
       }
-      addReinforcementInternal(side, "initiate")
     }
     if (resetState != JustEnded) {
       allowedFreeBuyPieces(side) = Set()
@@ -994,6 +993,8 @@ case class BoardState private (
           )
         if (free) {
           addReinforcementInternal(side, pieceName)
+          // should also get initiate on reset
+          addReinforcementInternal(side, "initiate")
           numFreeBuysAllowed(side) -= 1
         } else {
           addReinforcementInternal(side, pieceName)

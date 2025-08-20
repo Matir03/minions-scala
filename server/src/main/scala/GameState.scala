@@ -736,6 +736,7 @@ case class GameState(
           (0 until n).map(_ => fenChar(p, S0)).mkString("")
         } ++ boardState.allowedFreeBuyPieces(S0).map(fenChar(_, S0)))
         .mkString("")
+        .sorted
 
       val rein1 = (boardState
         .reinforcements(S1)
@@ -743,6 +744,7 @@ case class GameState(
           (0 until n).map(_ => fenChar(p, S1)).mkString("")
         } ++ boardState.allowedFreeBuyPieces(S1).map(fenChar(_, S1)))
         .mkString("")
+        .sorted
 
       val reset = boardState.resetState match {
         case FirstTurn => "f"
