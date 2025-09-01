@@ -133,7 +133,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
   def getBestTurn(): List[String] = {
     sendToEngine("position fen " + game.convertGameStateToFEN())
 
-    sendToEngine("play nodes 1")
+    sendToEngine("play")
 
     val _ = waitForResponse("turn")
 

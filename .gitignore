@@ -12,3 +12,4 @@ src/main/scala/*.class
 web/
 games/*
 *.metals
+graphviz/*

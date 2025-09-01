@@ -31,6 +31,13 @@ class TurnParser(game: GameState, makeActionId: () => String) {
         val boardActionType = parts(3)
 
         boardActionType match {
+          case "resign" =>
+            List(
+              Protocol.DoGameAction(
+                ResignBoard(boardIdx)
+              )
+            )
+
           case "setup" =>
             val unitChar = parts(5).charAt(0)
             val pieceName = pieceNameFromFenChar(unitChar)
