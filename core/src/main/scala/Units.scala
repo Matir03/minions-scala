@@ -294,7 +294,8 @@ object Units {
     isLumbering = true,
     attackRange = 1,
     attackEffect = Some(Damage(1)),
-    defense = Some(1)
+    defense = Some(1),
+    spawnRange = Some(1)
   )
 
   val zombie_necromancer = createPieceStats(
@@ -671,9 +672,9 @@ object Units {
 
   // Pieces that start off buyable
   val alwaysAcquiredPieces: Array[PieceStats] = Array(
-    zombie,
+    zombie
     // acolyte
-    initiate
+    // initiate
   )
 
   // Pieces that need to be unlocked, in order

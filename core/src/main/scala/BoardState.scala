@@ -993,8 +993,8 @@ case class BoardState private (
           )
         if (free) {
           addReinforcementInternal(side, pieceName)
-          // should also get initiate on reset
-          addReinforcementInternal(side, "initiate")
+          // should also get zombie on reset
+          addReinforcementInternal(side, "zombie")
           numFreeBuysAllowed(side) -= 1
         } else {
           addReinforcementInternal(side, pieceName)

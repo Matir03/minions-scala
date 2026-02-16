@@ -166,7 +166,7 @@ private class SpookyAI(out: ActorRef, game: GameState, enginePath: String)
     val maps = gameState.boardNames.map(mapNameToFen).mkString(",")
     val techs =
       gameState.game.techLine
-        .slice(2, gameState.game.techLine.length)
+        .slice(1, gameState.game.techLine.length)
         .map(t =>
           t.tech match {
             case PieceTech(pieceName) => game.fenChar(pieceName, S0)

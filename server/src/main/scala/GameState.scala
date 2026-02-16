@@ -686,13 +686,13 @@ case class GameState(
     def encodeTechState(techStates: Array[TechState]): String = {
       // For each tech, compute state
       val team0Spells = techStates
-        .slice(2, techStates.length)
+        .slice(1, techStates.length)
         .map { techState =>
           techState.level.apply(S0).toString.charAt(0)
         }
         .mkString("")
       val team1Spells = techStates
-        .slice(2, techStates.length)
+        .slice(1, techStates.length)
         .map { techState =>
           techState.level.apply(S1).toString.charAt(0)
         }
@@ -1172,7 +1172,7 @@ object GameState {
         val necroNames = SideArray.create(List(Units.necromancer.name))
         state.resetBoard(
           necroNames,
-          SideArray.create(Map("initiate" -> 1)),
+          SideArray.create(Map("zombie" -> 1)),
           externalInfo,
           FirstTurn
         )
